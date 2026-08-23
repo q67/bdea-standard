@@ -6,7 +6,7 @@ similar). This document specifies the `.bdea` index file format. It does not
 specify any particular application's behavior (see [§10](#10-notes-for-implementers-bdea-generator--bdea-browser)).
 
 This is the authoritative specification. See
-[`samples/Music.bdea`](samples/Music.bdea) for a canonical worked example.
+[`samples/music.bdea`](samples/music.bdea) for a canonical worked example.
 
 ## 1. Purpose and scope
 
@@ -54,12 +54,14 @@ The name is never authoritative — it's metadata, not identity.
 
 ## 4. File structure overview
 
-**File naming.** A library's index file is named `<LIBRARY>.bdea`, where
-`<LIBRARY>` matches the `! LIBRARY` header value (e.g. a library declared as
-`! LIBRARY Music` is stored as `Music.bdea`). One file per library; the name
-alone identifies which library it belongs to, which is what lets an archive
-be built as a plain collection of `<LIBRARY>.bdea` files without any extra
-index-of-indexes.
+**File naming.** A library's index file is named `<library>.bdea`, where
+`<library>` is the **lowercased** `! LIBRARY` header value (e.g. a library
+declared as `! LIBRARY Music` is stored as `music.bdea`, not `Music.bdea`).
+The filename is always all-lowercase regardless of the casing used in the
+header value — this keeps it unambiguous across filesystems that differ in
+case sensitivity. One file per library; the name alone identifies which
+library it belongs to, which is what lets an archive be built as a plain
+collection of `<library>.bdea` files without any extra index-of-indexes.
 
 A `.bdea` file is UTF-8 text with two kinds of lines:
 
@@ -368,7 +370,7 @@ something a parser can enforce.
 S|18|4|cover.jpg|1|1
 ```
 
-(From `Music-001`'s section in `samples/Music.bdea` — this aliases
+(From `Music-001`'s section in `samples/music.bdea` — this aliases
 `F|1|3|cover.jpg` from a second tree position, `dir_id=4`, the mp3
 folder's cover art, instead of archiving those bytes a second time; see
 §9.)
@@ -498,7 +500,7 @@ highest-numbered (most recent) volume available.
 
 ## 9. Worked example
 
-Walking through [`samples/Music.bdea`](samples/Music.bdea):
+Walking through [`samples/music.bdea`](samples/music.bdea):
 
 1. **Music-001** is burned first. It declares directories for
    `Music/Rafael Krux/...(flac)` and `.../...(mp3)`, and files for a cover
