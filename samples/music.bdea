@@ -37,6 +37,7 @@
 ! TYPE files_deleted uint64
 ! TYPE total_files uint64
 ! TYPE total_size uint64
+! TYPE volume_hash string max=32
 ! TYPE file_key volume_id file_id
 
 # SCHEMA
@@ -56,8 +57,14 @@
 # for the whole library as of this volume, not a raw running F count; S
 # records are never counted here.
 # last_dir_id = highest dir_id assigned in the library as of this volume.
+# volume_hash = checksum of just this volume's own F records, derived from
+# their hash values already recorded above (concatenate them, no separator
+# needed since they're all the same fixed length; hash with
+# CONTENT_HASH_ALGORITHM; encode with CONTENT_HASH_ENCODING) rather than by
+# re-reading any file's content. Unlike total_files/total_size/last_dir_id
+# this is per-volume, not a whole-library checkpoint.
 ! RECORD VOLUME_START volume_id volume_label datetime
-! RECORD VOLUME_END volume_id volume_label datetime files_added files_changed files_deleted total_files total_size last_dir_id
+! RECORD VOLUME_END volume_id volume_label datetime files_added files_changed files_deleted total_files total_size volume_hash last_dir_id
 
 # A field name ending in "?" is optional and trailing: a data line may omit
 # it (one fewer pipe-delimited field than declared); a missing one is empty/absent.
@@ -118,7 +125,7 @@ F|19|4|Rafael Krux - The Epic Baroque Album - 01 Baroque Harpsichord and Strings
 F|20|4|Rafael Krux - The Epic Baroque Album - 02 Classical Violin Concerto.mp3|3395847|BMI2BUZ35I46MNKNTFDMBW55QG
 F|21|4|Rafael Krux - The Epic Baroque Album - 03 Baroque Chamber Strings.mp3|4279664|4XBSXZUKK23GXQ2AHJBUDFP7WL
 
-VOLUME_END|1|Music-001|2026-08-13_1232|9|0|0|9|70477923|4
+VOLUME_END|1|Music-001|2026-08-13_1232|9|0|0|9|70477923|6VJWG7TG73DXOYCYXY6R6UXYUU|4
 
 
 VOLUME_START|2|Music-002|2026-08-14_1111
@@ -136,4 +143,4 @@ F|6|3|Rafael Krux - The Epic Baroque Album - 02 Classical Violin Concerto number
 A|2|6|2026-08-14_1111
 X|1|6|2026-08-14_1111
 
-VOLUME_END|2|Music-002|2026-08-14_1111|6|1|1|13|83620060|6
+VOLUME_END|2|Music-002|2026-08-14_1111|6|1|1|13|83620060|NMKRK63FVB7PPOLNTD7S5BL27A|6

@@ -141,6 +141,7 @@ self-describing and independently parseable.
 | `files_deleted` | `uint64` | Same kind as `count`; number of `X` records written in a volume's section (§7 `VOLUME_END`). |
 | `total_files` | `uint64` | Same kind as `count`; cumulative count of active files in the library as of a volume (§7 `VOLUME_END`). |
 | `total_size` | `uint64` | Same kind as `count`; cumulative byte size of active files in the library as of a volume (§7 `VOLUME_END`). |
+| `volume_hash` | `string max=32` | Same shape as `hash` (§6 `hash`); a per-volume checksum derived from other hashes already in the index rather than from a file's own content (§7 `VOLUME_END`). |
 | `file_key` | `volume_id file_id` | Composite: the full physical identity of a file record (§3). |
 
 `file_key` is a documentation-level composite — it names the concept of "the
@@ -166,7 +167,7 @@ rewritten.
 
 ```
 ! RECORD VOLUME_START volume_id volume_label datetime
-! RECORD VOLUME_END volume_id volume_label datetime files_added files_changed files_deleted total_files total_size last_dir_id
+! RECORD VOLUME_END volume_id volume_label datetime files_added files_changed files_deleted total_files total_size volume_hash last_dir_id
 ```
 
 `VOLUME_START` declares one volume (one physical disc) and opens its
@@ -223,6 +224,25 @@ and how an application can use them):
   through its target.
 - `total_size` — sum of `size` across that same active set; likewise
   unaffected by however many `S` aliases exist.
+- `volume_hash` — a checksum of exactly this volume's own `F` records,
+  derived purely from their `hash` values already recorded a few lines up
+  in this same section (§6 `hash`) — never by re-reading any file's actual
+  content. Computed by concatenating, in the order they appear in this
+  volume's section, each `F` record's `hash` field — with no separator
+  between them, since every `hash` in a given file is the same fixed
+  length (§6 `hash`) for as long as `! CONTENT_HASH_ALGORITHM`/
+  `! CONTENT_HASH_ENCODING` stay unchanged, which makes plain
+  concatenation unambiguous — then applying `! CONTENT_HASH_ALGORITHM` to
+  the resulting bytes and encoding the result with
+  `! CONTENT_HASH_ENCODING` (§5) — the same two header declarations
+  already used for every per-file hash, just applied over a different
+  input. `S` records contribute nothing, since they carry no
+  `hash` of their own (§7 `S`); a volume that happens to add no `F` records
+  at all uses the hash of an empty input. Unlike
+  `total_files`/`total_size`/`last_dir_id`, this is **not** a whole-library
+  checkpoint — it's scoped to this one volume, the same way `files_added`
+  is, which is what lets it double as a self-contained checksum of what
+  that specific physical medium holds.
 - `last_dir_id` — highest `dir_id` assigned in the library as of this
   volume; unlike `total_files`/`total_size` this one is a simple monotonic
   maximum, unaffected by `A`/`X` (§7 `D`).
@@ -234,7 +254,7 @@ only their removal (via `X`) is folded into `files_deleted`.
 ```
 VOLUME_START|1|Music-001|2026-08-13_1232
 ...
-VOLUME_END|1|Music-001|2026-08-13_1232|9|0|0|9|70477923|4
+VOLUME_END|1|Music-001|2026-08-13_1232|9|0|0|9|70477923|6VJWG7TG73DXOYCYXY6R6UXYUU|4
 ```
 
 ### `D` — directory
@@ -467,7 +487,7 @@ F|1|3|cover.jpg|125142|...
 ...
 S|18|4|cover.jpg|1|1
 
-VOLUME_END|1|Music-001|2026-08-13_1232|9|0|0|9|70477923|4
+VOLUME_END|1|Music-001|2026-08-13_1232|9|0|0|9|70477923|6VJWG7TG73DXOYCYXY6R6UXYUU|4
 
 # ----------------- Music-002 -----------------
 
@@ -480,7 +500,7 @@ F|1|6|...
 A|2|6|2026-08-14_1111
 X|1|6|2026-08-14_1111
 
-VOLUME_END|2|Music-002|2026-08-14_1111|6|1|1|13|83620060|6
+VOLUME_END|2|Music-002|2026-08-14_1111|6|1|1|13|83620060|NMKRK63FVB7PPOLNTD7S5BL27A|6
 ```
 
 Each new volume appends: one `VOLUME_START` line, `D` records for any
@@ -513,8 +533,15 @@ Walking through [`samples/music.bdea`](samples/music.bdea):
    `F|1|3|cover.jpg` instead of writing those bytes again (§7 `S`) — the
    deliberate-duplication case `S` exists for, as opposed to point 2 below,
    which is a mistake corrected via `A`. Closing this volume's section,
-   `VOLUME_END|1|Music-001|2026-08-13_1232|9|0|0|9|70477923|4` counts `9`
-   files, not `10` — the alias doesn't add to the tally (§7 `VOLUME_END`).
+   `VOLUME_END|1|Music-001|2026-08-13_1232|9|0|0|9|70477923|6VJWG7TG73DXOYCYXY6R6UXYUU|4`
+   counts `9` files, not `10` — the alias doesn't add to the tally (§7
+   `VOLUME_END`). Its second-to-last field, `6VJWG7TG73DXOYCYXY6R6UXYUU`, is
+   `volume_hash`: concatenate those same 9 `F` records' own `hash` values,
+   in the order they appear (no separator needed, since they're all the
+   same fixed length), then hash and encode that text the same way
+   `CONTENT_HASH_ALGORITHM`/`CONTENT_HASH_ENCODING` (§5) already hash file
+   content. No archived byte is touched to produce it — it's built purely
+   from hashes already sitting in the index.
 2. **Music-002** is burned later. It declares the one genuinely new folder
    tree it needs (`Music/Sandra Bernardo/...`, `dir_id` 5 and 6) and adds
    that artist's files there. It also adds one more file directly under
@@ -543,7 +570,7 @@ Walking through [`samples/music.bdea`](samples/music.bdea):
      become unreadable/lost on that disc. Since nothing else in the library
      shares its hash, that track is effectively lost from the archive unless
      recovered and re-added later.
-4. Closing `Music-002`'s section, `VOLUME_END|2|Music-002|2026-08-14_1111|6|1|1|13|83620060|6`
+4. Closing `Music-002`'s section, `VOLUME_END|2|Music-002|2026-08-14_1111|6|1|1|13|83620060|NMKRK63FVB7PPOLNTD7S5BL27A|6`
    records that volume's own tally (`6` files added, `1` change, `1`
    deletion) alongside a checkpoint of the *whole* library. `total_files`
    is `13`, not the `15` `F` records the two volumes have written between
@@ -551,11 +578,16 @@ Walking through [`samples/music.bdea`](samples/music.bdea):
    — it already excludes `Music-001`'s `F|3|3` (superseded by the `A`
    above) and `Music-001`'s `F|6|3` (lost per the `X` above):
    `15 - 1 - 1 = 13`. `total_size` (`83620060`) is the sum of `size` across
-   that same 13-record active set, and `last_dir_id` (`6`) is the highest
-   `dir_id` either volume has assigned so far. A reader that fully
-   reconstructs the library from scratch should land on these same three
-   numbers — if it doesn't, either the reconstruction or the index has a
-   bug (§10).
+   that same 13-record active set, and `last_dir_id` (`6`, the final field)
+   is the highest `dir_id` either volume has assigned so far. A reader that
+   fully reconstructs the library from scratch should land on these same
+   three numbers — if it doesn't, either the reconstruction or the index
+   has a bug (§10). The second-to-last field, `NMKRK63FVB7PPOLNTD7S5BL27A`,
+   is this section's own `volume_hash`, built the same way as
+   `Music-001`'s but from only this volume's `6` `F` hashes — it does not
+   extend or combine with `Music-001`'s `volume_hash`, since (unlike
+   `total_files`/`total_size`/`last_dir_id`) `volume_hash` is scoped per
+   volume, not a whole-library checkpoint.
 
 ## 10. Notes for implementers (BDEA-Generator / BDEA-Browser)
 
