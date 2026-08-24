@@ -16,7 +16,7 @@
 ! CONTENT_HASH_ENCODING base32
 ! CONTENT_HASH_SCOPE file-content
 
-# TYPES
+#  TYPES
 
 ! TYPE dir_id uint32
 ! TYPE last_dir_id uint32
@@ -40,9 +40,9 @@
 ! TYPE volume_hash string max=32
 ! TYPE file_key volume_id file_id
 
-# SCHEMA
+#  SCHEMA
 
-# Volume boundary
+#  Volume boundary
 # VOLUME_START opens a volume's section, VOLUME_END closes it.
 # volume_id identifies the volume inside the library.
 # volume_id is an internal numeric identifier.
@@ -69,7 +69,7 @@
 # A field name ending in "?" is optional and trailing: a data line may omit it
 # (one fewer pipe-delimited field than declared); a missing one is empty/absent.
 
-# Directory
+#  Directory
 # A logical directory in the library's namespace.
 # Directories form a single, stable, append-only namespace tree for the whole
 # library.
@@ -80,7 +80,7 @@
 # extra is optional/trailing, free-form (e.g. tags).
 ! RECORD D dir_id parent_dir_id name extra?
 
-# File
+#  File
 # The file identifier is unique only within the volume.
 # The full file identity is defined as (volume_id, file_id).
 # volume_id is derived from the enclosing VOLUME_START/VOLUME_END section.
@@ -91,7 +91,7 @@
 # extra is optional/trailing, free-form (e.g. tags).
 ! RECORD F file_id dir_id name size hash extra?
 
-# Symlink
+#  Symlink
 # S is an alias: a new (dir_id, name) tree position that reaches for an existing
 # F record's content instead of archiving another physical copy.
 # file_id is drawn from the same per-volume counter as F's file_id (shared
@@ -101,7 +101,7 @@
 # dir_id may also be 0, same root meaning as F's dir_id.
 ! RECORD S file_id dir_id name target_volume_id target_file_id
 
-# Active
+#  Active
 # A marks one physical file record as the active representation of the archived
 # content. It may reference a file stored on any volume.
 # A always names an F record, never an S — an alias holds no content of its own
@@ -112,7 +112,7 @@
 # This is required to support corrections.
 ! RECORD A volume_id file_id datetime
 
-# Deleted
+#  Deleted
 # X marks one physical file record as unavailable or excluded from the active
 # view of the library. It may reference a file stored on any volume.
 ! RECORD X volume_id file_id datetime
