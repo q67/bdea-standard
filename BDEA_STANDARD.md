@@ -59,11 +59,9 @@ the rest of the filename is arbitrary — nothing in this standard requires
 it to match `! LIBRARY`, its casing, or otherwise encode which library the
 file describes. A reader determines that from the `! LIBRARY` header
 declaration (§5) inside the file, not from the filename. One file per
-library. Naming the file after the lowercased `! LIBRARY` value (e.g.
-`music.bdea` for a library declared as `! LIBRARY Music`) remains a
-reasonable convention — it keeps a plain collection of index files
-self-explanatory at a glance — but an application must not rely on it: any
-`.bdea` file's actual library is whatever its own header says.
+library — a file could equally be named `music.bdea`, `music-2026-08-23.bdea`,
+or anything else ending in `.bdea`; an application must never infer the
+library from the name.
 
 A `.bdea` file is UTF-8 text with two kinds of lines:
 
