@@ -103,7 +103,7 @@ These appear once, near the top of the file, before any volume section.
 | `! TEXT_ENCODING` | `utf-8` | Encoding of the `.bdea` file itself. |
 | `! TEXT_NORMALIZATION` | `NFC` | Unicode normalization form used for the file's text. |
 | `! ARCHIVE_TYPE` | `BDEA` | Format identifier. |
-| `! VERSION` | `1` | Format version (see §11). |
+| `! VERSION` | `1.0` | Format version (see §11). |
 | `! LIBRARY` | `Music` | Name of this library. |
 | `! NAME_ENCODING` | `utf-8` | Encoding used for file/directory `name` fields. |
 | `! NAME_NORMALIZATION` | `NFC` | Unicode normalization applied to names. |
@@ -155,7 +155,7 @@ identity, since it's global across the library.
 
 A field name ending in `?` in a `! RECORD` declaration marks it **optional
 and trailing**: a data line using that tag may omit it, having one fewer
-pipe-delimited field than declared. As of `! VERSION 1` this applies only to
+pipe-delimited field than declared. As of `! VERSION 1.0` this applies only to
 `extra?` on `D` and `F` (below) — every other field is mandatory. A
 conforming parser must accept a `D`/`F` line with or without its trailing
 `extra` field, treating a missing one as empty/absent. This is what lets
@@ -248,7 +248,7 @@ and how an application can use them):
   maximum, unaffected by `A`/`X` (§7 `D`).
 
 `S` additions themselves aren't tallied by any of the three counts above —
-there's no dedicated per-volume counter for aliases as of `! VERSION 1`;
+there's no dedicated per-volume counter for aliases as of `! VERSION 1.0`;
 only their removal (via `X`) is folded into `files_deleted`.
 
 ```
@@ -667,6 +667,42 @@ applications against it — not additional format rules:
 
 ## 11. Versioning
 
-`! VERSION` on the header identifies the schema version this file conforms
-to (currently `1`, as defined above). Future changes to `! TYPE`/`! RECORD`
-shapes should bump this so readers can detect incompatible layouts.
+`! VERSION` on the header identifies the schema version a file conforms to,
+written as `MAJOR.MINOR` (e.g. `1.0`, `1.2`, `2.0`) — currently `1.0`.
+
+**Minor version — backward-compatible, additive.** Bumping only `MINOR`
+(e.g. `1.0` → `1.1`) means every file declaring an earlier minor version
+within the same `MAJOR` remains fully valid and correctly interpretable
+under the new one: nothing already declared changes meaning, shape, or
+becomes mandatory. A reader that implements `MAJOR.N` can therefore also
+correctly read any file declaring `MAJOR.M` for any `M <= N` — support
+accumulates top-down within a major line. Changes that qualify as minor:
+
+- Adding a new optional trailing field to an existing `! RECORD` — the same
+  mechanism `extra?` already uses (§7 preamble); a reader unaware of the
+  new field simply doesn't see it, exactly as with any other optional
+  trailing field.
+- Adding a new header declaration (§5) whose absence doesn't change how any
+  existing header or record is interpreted — a reader that doesn't
+  recognize it can ignore it and still correctly process everything else in
+  the file.
+
+**Major version — breaking.** Bumping `MAJOR` (e.g. `1.2` → `2.0`, which
+resets `MINOR` to `0`) means files on either side of the boundary aren't
+guaranteed compatible: a reader built for `1.x` isn't expected to correctly
+read a `2.x` file, or vice versa. Anything that isn't minor-safe by the
+criteria above is major, including:
+
+- Changing an existing field's meaning, type, or position within an
+  already-declared `! RECORD`.
+- Removing a field, a record tag, or a header declaration.
+- Turning an existing optional field mandatory, or a mandatory field
+  optional.
+- Introducing a new record tag or a new mandatory field that a reader
+  built for the previous version has no way to skip over and still
+  correctly reconstruct the library.
+
+A reader should always trust the specific file's own declared `! VERSION`
+(§10 "Always parse the header first") over assumptions drawn from this
+document alone — this section describes how the two numbers are meant to
+behave, not a substitute for reading them.

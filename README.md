@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="spec version" src="https://img.shields.io/badge/spec%20version-1-blue">
+  <img alt="spec version" src="https://img.shields.io/badge/spec%20version-1.0-blue">
   <img alt="license" src="https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey">
 </p>
 
@@ -48,7 +48,7 @@ The format is:
 
 ```
 ! ARCHIVE_TYPE BDEA
-! VERSION 1
+! VERSION 1.0
 ! LIBRARY Music
 ...
 
@@ -68,7 +68,7 @@ See [`BDEA_STANDARD.md`](BDEA_STANDARD.md) for the full grammar, and
 
 ## Status
 
-Current format version: **1** (see §11 *Versioning* in the spec). This
+Current format version: **1.0** (see §11 *Versioning* in the spec). This
 repository defines the format only. Reference applications
 (browser/generator/linter) are a separate, ongoing effort.
 
@@ -81,8 +81,9 @@ list it here.
 
 Issues and pull requests proposing clarifications or extensions to the spec
 are welcome. Any change to the `! TYPE`/`! RECORD` shapes bumps
-`! VERSION` (§11) — open an issue to discuss before sending a PR that would
-require a version bump.
+`! VERSION` (§11) — a backward-compatible addition bumps `MINOR`, anything
+breaking bumps `MAJOR`. Open an issue to discuss before sending a PR that
+would require either.
 
 ## FAQ
 
