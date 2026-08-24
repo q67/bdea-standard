@@ -66,14 +66,16 @@
 ! RECORD VOLUME_START volume_id volume_label datetime
 ! RECORD VOLUME_END volume_id volume_label datetime files_added files_changed files_deleted total_files total_size volume_hash last_dir_id
 
-# A field name ending in "?" is optional and trailing: a data line may omit
-# it (one fewer pipe-delimited field than declared); a missing one is empty/absent.
+# A field name ending in "?" is optional and trailing: a data line may omit it
+# (one fewer pipe-delimited field than declared); a missing one is empty/absent.
 
 # Directory
 # A logical directory in the library's namespace.
-# Directories form a single, stable, append-only namespace tree for the whole library.
+# Directories form a single, stable, append-only namespace tree for the whole
+# library.
 # dir_id is global across the whole library, assigned once per directory.
-# dir_id values start at 1; the library's root is implicit (0) and has no D record of its own.
+# dir_id values start at 1; the library's root is implicit (0) and has no D
+# record of its own.
 # Empty directories may be omitted.
 # extra is optional/trailing, free-form (e.g. tags).
 ! RECORD D dir_id parent_dir_id name extra?
@@ -84,26 +86,35 @@
 # volume_id is derived from the enclosing VOLUME_START/VOLUME_END section.
 # File identity is defined by content size and content hash.
 # file_id is unique only within the volume_id scope.
-# dir_id is the containing directory's global id; 0 means the file lives directly in the library's root.
+# dir_id is the containing directory's global id; 0 means the file lives
+# directly in the library's root.
 # extra is optional/trailing, free-form (e.g. tags).
 ! RECORD F file_id dir_id name size hash extra?
 
 # Symlink
-# S is an alias: a new (dir_id, name) tree position that reaches for an existing F record's content instead of archiving another physical copy.
-# file_id is drawn from the same per-volume counter as F's file_id (shared numbering), so X can remove an S the same way it removes an F.
-# target_volume_id/target_file_id may point at an F on any volume; resolved through A/X like any other content, not a rigid pointer.
+# S is an alias: a new (dir_id, name) tree position that reaches for an existing
+# F record's content instead of archiving another physical copy.
+# file_id is drawn from the same per-volume counter as F's file_id (shared
+# numbering), so X can remove an S the same way it removes an F.
+# target_volume_id/target_file_id may point at an F on any volume; resolved
+# through A/X like any other content, not a rigid pointer.
 # dir_id may also be 0, same root meaning as F's dir_id.
 ! RECORD S file_id dir_id name target_volume_id target_file_id
 
 # Active
-# A marks one physical file record as the active representation of the archived content. It may reference a file stored on any volume.
-# A always names an F record, never an S — an alias holds no content of its own to be canonical for.
-# Whenever the same content exists as more than one F record (any number of volumes), A names exactly one as canonical; the rest drop out of total_files/total_size without needing X.
+# A marks one physical file record as the active representation of the archived
+# content. It may reference a file stored on any volume.
+# A always names an F record, never an S — an alias holds no content of its own
+# to be canonical for.
+# Whenever the same content exists as more than one F record (any number of
+# volumes), A names exactly one as canonical; the rest drop out of
+# total_files/total_size without needing X.
 # This is required to support corrections.
 ! RECORD A volume_id file_id datetime
 
 # Deleted
-# X marks one physical file record as unavailable or excluded from the active view of the library. It may reference a file stored on any volume.
+# X marks one physical file record as unavailable or excluded from the active
+# view of the library. It may reference a file stored on any volume.
 ! RECORD X volume_id file_id datetime
 
 
