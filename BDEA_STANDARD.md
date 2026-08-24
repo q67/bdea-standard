@@ -54,14 +54,16 @@ The name is never authoritative — it's metadata, not identity.
 
 ## 4. File structure overview
 
-**File naming.** A library's index file is named `<library>.bdea`, where
-`<library>` is the **lowercased** `! LIBRARY` header value (e.g. a library
-declared as `! LIBRARY Music` is stored as `music.bdea`, not `Music.bdea`).
-The filename is always all-lowercase regardless of the casing used in the
-header value — this keeps it unambiguous across filesystems that differ in
-case sensitivity. One file per library; the name alone identifies which
-library it belongs to, which is what lets an archive be built as a plain
-collection of `<library>.bdea` files without any extra index-of-indexes.
+**File naming.** A library's index file must have the `.bdea` extension;
+the rest of the filename is arbitrary — nothing in this standard requires
+it to match `! LIBRARY`, its casing, or otherwise encode which library the
+file describes. A reader determines that from the `! LIBRARY` header
+declaration (§5) inside the file, not from the filename. One file per
+library. Naming the file after the lowercased `! LIBRARY` value (e.g.
+`music.bdea` for a library declared as `! LIBRARY Music`) remains a
+reasonable convention — it keeps a plain collection of index files
+self-explanatory at a glance — but an application must not rely on it: any
+`.bdea` file's actual library is whatever its own header says.
 
 A `.bdea` file is UTF-8 text with two kinds of lines:
 

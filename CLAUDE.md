@@ -8,8 +8,9 @@ Source of truth for the `.bdea` index format.
   the same content (English is authoritative on any discrepancy).
 - `samples/music.bdea` — canonical worked example: a self-describing header
   plus two volumes, including a duplicate-content case and an active/deleted
-  correction. Index files are named `<library>.bdea`, always lowercase (this
-  one's `! LIBRARY` is `Music`, so the file is `music.bdea`).
+  correction. Only the `.bdea` extension is required by the format — this
+  one is named `music.bdea` after its lowercased `! LIBRARY` (`Music`),
+  following this repo's convention, but that naming isn't format-mandated.
 
 See the root [`CLAUDE.md`](../CLAUDE.md) for project-wide conventions
 (communicate with the user in Ukrainian).
