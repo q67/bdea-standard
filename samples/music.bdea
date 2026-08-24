@@ -20,11 +20,14 @@
 
 ! TYPE dir_id uint32
 ! TYPE last_dir_id uint32
+! TYPE new_dir_id uint32
 ! TYPE parent_dir_id uint32
+! TYPE new_parent_dir_id uint32
 ! TYPE file_id uint64
 ! TYPE target_file_id uint64
 ! TYPE size uint64
 ! TYPE name string max=120
+! TYPE new_name string max=120
 ! TYPE hash string max=32
 ! TYPE extra string max=256
 ! TYPE volume_id uint32
@@ -33,8 +36,6 @@
 ! TYPE datetime string max=15 YYYY-MM-DD_hhmm
 ! TYPE count uint64
 ! TYPE files_added uint64
-! TYPE files_changed uint64
-! TYPE files_deleted uint64
 ! TYPE total_files uint64
 ! TYPE total_size uint64
 ! TYPE volume_hash string max=32
@@ -50,10 +51,12 @@
 # datetime on VOLUME_START/VOLUME_END is when the index record itself was
 # generated, not the physical medium's write timing. Producing one volume's
 # index entries is a single fast step, so datetime is the same value on
-# VOLUME_START, VOLUME_END, and any A/X records within that volume's section.
+# VOLUME_START, VOLUME_END, and any AF/XF/XD/RD/RF records within that
+# volume's section.
 # VOLUME_END repeats volume_label/datetime for corruption detection, then adds:
-# files_added/files_changed/files_deleted = this volume's own F/A/X counts.
-# total_files/total_size = active (A/X-resolved) file count and byte size
+# files_added = this volume's own F record count (the only per-volume tally
+# kept; AF/XF/XD/RD/RF/S have no dedicated counter of their own).
+# total_files/total_size = active (AF/XF/XD-resolved) file count and byte size
 # for the whole library as of this volume, not a raw running F count; S
 # records are never counted here.
 # last_dir_id = highest dir_id assigned in the library as of this volume.
@@ -64,7 +67,7 @@
 # re-reading any file's content. Unlike total_files/total_size/last_dir_id
 # this is per-volume, not a whole-library checkpoint.
 ! RECORD VOLUME_START volume_id volume_label datetime
-! RECORD VOLUME_END volume_id volume_label datetime files_added files_changed files_deleted total_files total_size volume_hash last_dir_id
+! RECORD VOLUME_END volume_id volume_label datetime files_added total_files total_size volume_hash last_dir_id
 
 # A field name ending in "?" is optional and trailing: a data line may omit it
 # (one fewer pipe-delimited field than declared); a missing one is empty/absent.
@@ -95,27 +98,51 @@
 # S is an alias: a new (dir_id, name) tree position that reaches for an existing
 # F record's content instead of archiving another physical copy.
 # file_id is drawn from the same per-volume counter as F's file_id (shared
-# numbering), so X can remove an S the same way it removes an F.
+# numbering), so XF/RF can correct an S the same way they correct an F.
 # target_volume_id/target_file_id may point at an F on any volume; resolved
-# through A/X like any other content, not a rigid pointer.
+# through AF/XF/XD like any other content, not a rigid pointer. RF corrections
+# to the target's own name/dir_id don't affect the alias, which addresses it
+# by file_key, not by name.
 # dir_id may also be 0, same root meaning as F's dir_id.
 ! RECORD S file_id dir_id name target_volume_id target_file_id
 
 #  Active
-# A marks one physical file record as the active representation of the archived
+# AF marks one physical file record as the active representation of the archived
 # content. It may reference a file stored on any volume.
-# A always names an F record, never an S — an alias holds no content of its own
+# AF always names an F record, never an S — an alias holds no content of its own
 # to be canonical for.
 # Whenever the same content exists as more than one F record (any number of
-# volumes), A names exactly one as canonical; the rest drop out of
-# total_files/total_size without needing X.
+# volumes), AF names exactly one as canonical; the rest drop out of
+# total_files/total_size without needing XF.
 # This is required to support corrections.
-! RECORD A volume_id file_id datetime
+! RECORD AF volume_id file_id datetime
 
-#  Deleted
-# X marks one physical file record as unavailable or excluded from the active
-# view of the library. It may reference a file stored on any volume.
-! RECORD X volume_id file_id datetime
+#  Deleted (file/alias)
+# XF marks one physical file or alias record as unavailable or excluded from
+# the active view of the library. It may reference a file stored on any volume.
+! RECORD XF volume_id file_id datetime
+
+#  Deleted (directory)
+# XD marks a directory, and everything beneath it in the tree (any volume),
+# as excluded from the active view. dir_id alone identifies the target, since
+# dir_id is never reused. Doesn't retire dir_id: later volumes may still file
+# new records under it.
+! RECORD XD dir_id datetime
+
+#  Renamed/relocated (directory)
+# RD corrects an existing directory's parent_dir_id and/or name going forward,
+# without writing any new D/F/S record. Because the tree is built from
+# dir_id/parent_dir_id links, one RD moves or renames the whole subtree at
+# once. The latest RD for a given dir_id wins.
+! RECORD RD dir_id new_parent_dir_id new_name datetime
+
+#  Renamed/relocated (file/alias)
+# RF corrects an existing F or S record's dir_id and/or name going forward,
+# without rewriting its content. Addresses either an F or an S, like AF/XF.
+# Unrelated to AF: AF picks which duplicate is canonical, RF fixes where one
+# record sits in the tree. The latest RF for a given (volume_id, file_id)
+# wins.
+! RECORD RF volume_id file_id new_dir_id new_name datetime
 
 
 VOLUME_START|1|Music-001|2026-08-13_1232
@@ -136,7 +163,7 @@ F|19|4|Rafael Krux - The Epic Baroque Album - 01 Baroque Harpsichord and Strings
 F|20|4|Rafael Krux - The Epic Baroque Album - 02 Classical Violin Concerto.mp3|3395847|BMI2BUZ35I46MNKNTFDMBW55QG
 F|21|4|Rafael Krux - The Epic Baroque Album - 03 Baroque Chamber Strings.mp3|4279664|4XBSXZUKK23GXQ2AHJBUDFP7WL
 
-VOLUME_END|1|Music-001|2026-08-13_1232|9|0|0|9|70477923|6VJWG7TG73DXOYCYXY6R6UXYUU|4
+VOLUME_END|1|Music-001|2026-08-13_1232|9|9|70477923|6VJWG7TG73DXOYCYXY6R6UXYUU|4
 
 
 VOLUME_START|2|Music-002|2026-08-14_1111
@@ -151,7 +178,19 @@ F|4|6|04 - Me Quedo Con MI Amor.mp3|6679444|U2RWSVHNYEYJQLGFTVF5JEY3OJ
 F|5|6|05 - Mamita Rica.mp3|5944026|R5NJMQN4EKPCVC37YZVMT3AWL6
 F|6|3|Rafael Krux - The Epic Baroque Album - 02 Classical Violin Concerto.flac|8541907|VUMGOS3L25V5JEP4LU6OI5PXQG|baroque,epic
 
-A|2|6|2026-08-14_1111
-X|1|6|2026-08-14_1111
+AF|2|6|2026-08-14_1111
+XF|1|6|2026-08-14_1111
 
-VOLUME_END|2|Music-002|2026-08-14_1111|6|1|1|13|83620060|NMKRK63FVB7PPOLNTD7S5BL27A|6
+VOLUME_END|2|Music-002|2026-08-14_1111|6|13|83620060|NMKRK63FVB7PPOLNTD7S5BL27A|6
+
+
+VOLUME_START|3|Music-003|2026-08-20_0900
+
+D|9|2|Rafael Krux - The Epic Baroque Album
+
+RD|3|9|(flac)|2026-08-20_0900
+RD|4|9|(mp3)|2026-08-20_0900
+RF|1|18|4|folder.jpg|2026-08-20_0900
+XD|6|2026-08-20_0900
+
+VOLUME_END|3|Music-003|2026-08-20_0900|0|8|53853523|2QOYZWMPACZAJ2MABGMOZ6CCPY|9

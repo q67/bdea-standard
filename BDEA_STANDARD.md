@@ -70,8 +70,8 @@ A `.bdea` file is UTF-8 text with two kinds of lines:
 - **Comments** — start with `#`, free text, ignored by parsers.
 - **Records** — data lines shaped `TAG|field1|field2|...`, pipe-delimited.
   `TAG` is whatever tag a `! RECORD` declaration (§7) defined — one or more
-  characters (`VOLUME_START`, `VOLUME_END`, `D`, `F`, `S`, `A`, `X` in the
-  current schema).
+  characters (`VOLUME_START`, `VOLUME_END`, `D`, `F`, `S`, `AF`, `XF`, `XD`,
+  `RD`, `RF` in the current schema).
 
 Blank lines are allowed as visual separators (e.g. between volume sections).
 
@@ -124,28 +124,29 @@ self-describing and independently parseable.
 |---|---|---|
 | `dir_id` | `uint32` | Global across the library — assigned once per directory and never reused, regardless of which volume introduced it. Real values start at `1`; `0` is reserved to mean the library's implicit root (§7 `D`, `F`, `S`). |
 | `last_dir_id` | `uint32` | Same kind as `dir_id`; highest `dir_id` assigned in the library as of a given volume (§7 `VOLUME_END`). |
+| `new_dir_id` | `uint32` | Same kind as `dir_id`; the corrected directory an `RF` correction files a record under (§7 `RF`). |
 | `parent_dir_id` | `uint32` | `0` = root of the library's namespace. |
+| `new_parent_dir_id` | `uint32` | Same kind as `parent_dir_id`; the corrected parent an `RD` correction gives a directory (§7 `RD`). |
 | `file_id` | `uint64` | Local to a volume. |
 | `target_file_id` | `uint64` | Same kind as `file_id`; the `F` record an `S` alias reaches for (§7 `S`). |
 | `size` | `uint64` | Bytes. |
 | `name` | `string max=120` | File or directory name. |
+| `new_name` | `string max=120` | Same kind as `name`; the corrected name written by an `RD`/`RF` correction (§7 `RD`, §7 `RF`). |
 | `hash` | `string max=32` | Encoded content hash (26 chars for base32 MD5; the extra headroom allows for a longer hash if `CONTENT_HASH_ALGORITHM` ever changes). |
 | `extra` | `string max=256` | Free-form field on `D`/`F` records (§7 `D`, §7 `F`), e.g. tags. Left empty by any application that has no use for it. |
 | `volume_id` | `uint32` | Local to the library. |
 | `target_volume_id` | `uint32` | Same kind as `volume_id`; the volume of the `F` record an `S` alias reaches for (§7 `S`). |
 | `volume_label` | `string max=120` | Human/physical label printed on the medium. |
-| `datetime` | `string max=15` | `YYYY-MM-DD_hhmm` — always when the *producing application* generated the surrounding index record(s), never the physical medium's own write timing (out of scope, §1). Producing one volume's index entries is treated as a single, fast step, so every `datetime` within that volume's section (`VOLUME_START`, `VOLUME_END`, any `A`/`X`) conventionally carries the *same* value — it is not a start/end pair for how long the physical burn took. |
-| `count` | `uint64` | Generic non-negative counter kind, shared by `files_added`, `files_changed`, `files_deleted`, `total_files`, and `total_size` below (§7 `VOLUME_END`) — each declared as its own `! TYPE` so a field's type can be looked up by name alone. |
+| `datetime` | `string max=15` | `YYYY-MM-DD_hhmm` — always when the *producing application* generated the surrounding index record(s), never the physical medium's own write timing (out of scope, §1). Producing one volume's index entries is treated as a single, fast step, so every `datetime` within that volume's section (`VOLUME_START`, `VOLUME_END`, any `AF`/`XF`/`XD`/`RD`/`RF`) conventionally carries the *same* value — it is not a start/end pair for how long the physical burn took. |
+| `count` | `uint64` | Generic non-negative counter kind, shared by `files_added`, `total_files`, and `total_size` below (§7 `VOLUME_END`) — each declared as its own `! TYPE` so a field's type can be looked up by name alone. |
 | `files_added` | `uint64` | Same kind as `count`; number of `F` records written in a volume's section (§7 `VOLUME_END`). |
-| `files_changed` | `uint64` | Same kind as `count`; number of `A` records written in a volume's section (§7 `VOLUME_END`). |
-| `files_deleted` | `uint64` | Same kind as `count`; number of `X` records written in a volume's section (§7 `VOLUME_END`). |
 | `total_files` | `uint64` | Same kind as `count`; cumulative count of active files in the library as of a volume (§7 `VOLUME_END`). |
 | `total_size` | `uint64` | Same kind as `count`; cumulative byte size of active files in the library as of a volume (§7 `VOLUME_END`). |
 | `volume_hash` | `string max=32` | Same shape as `hash` (§6 `hash`); a per-volume checksum derived from other hashes already in the index rather than from a file's own content (§7 `VOLUME_END`). |
 | `file_key` | `volume_id file_id` | Composite: the full physical identity of a file record (§3). |
 
 `file_key` is a documentation-level composite — it names the concept of "the
-tuple that uniquely locates this record"; the `A`/`X` `! RECORD`
+tuple that uniquely locates this record"; the `AF`/`XF`/`RF` `! RECORD`
 declarations still spell out `volume_id`/`file_id` as separate fields rather
 than referencing this composite name directly. Directories have no
 equivalent composite: `dir_id` alone is already a directory's full
@@ -167,13 +168,13 @@ rewritten.
 
 ```
 ! RECORD VOLUME_START volume_id volume_label datetime
-! RECORD VOLUME_END volume_id volume_label datetime files_added files_changed files_deleted total_files total_size volume_hash last_dir_id
+! RECORD VOLUME_END volume_id volume_label datetime files_added total_files total_size volume_hash last_dir_id
 ```
 
 `VOLUME_START` declares one volume (one physical disc) and opens its
-section; `VOLUME_END` closes it. Every `D`, `F`, `S`, `A`, and `X` record
-between a `VOLUME_START` and its matching `VOLUME_END` was written as part
-of producing that volume:
+section; `VOLUME_END` closes it. Every `D`, `F`, `S`, `AF`, `XF`, `XD`, `RD`,
+and `RF` record between a `VOLUME_START` and its matching `VOLUME_END` was
+written as part of producing that volume:
 
 - `D` records in this range declare any directories newly introduced by
   this volume (§7 `D`) — a directory that already exists in the library
@@ -183,9 +184,12 @@ of producing that volume:
 - `S` records in this range derive their `volume_id` from this section the
   same way `F` does (§7 `S`) — though the *content* they reach for may
   live on any volume, via their own explicit `target_volume_id`.
-- `A`/`X` records may appear here even though they can reference a file on
-  *any* volume (§7 `A`, `X`) — their own explicit `volume_id` field is what
-  matters for them, not their position in the file.
+- `AF`/`XF`/`RF` records may appear here even though they can reference a
+  file on *any* volume (§7 `AF`, `XF`, `RF`) — their own explicit `volume_id`
+  field is what matters for them, not their position in the file. `XD`/`RD`
+  records likewise may reference a `dir_id` assigned by any earlier volume
+  (§7 `XD`, `RD`) — directories need no `volume_id` at all, since `dir_id`
+  is already global (§3, §10).
 
 Fields shared by both records:
 
@@ -201,27 +205,24 @@ Fields shared by both records:
   entries (§6 `datetime`). Producing one volume's section is treated as a
   single, fast step — distinct from, and typically much shorter than, the
   physical burn — so this carries the *same* value on `VOLUME_START`,
-  `VOLUME_END`, and any `A`/`X` records the same section contains; it is
-  not a start/end pair for the physical burn's duration.
+  `VOLUME_END`, and any `AF`/`XF`/`XD`/`RD`/`RF` records the same section
+  contains; it is not a start/end pair for the physical burn's duration.
 
 `VOLUME_END`-only fields — this volume's own tally, plus a checkpoint of
 the whole library's state as of this volume (§10 explains why these exist
 and how an application can use them):
 
 - `files_added` — count of `F` records written in this volume's section.
-- `files_changed` — count of `A` records written in this volume's section
-  (these may correct files on any volume, not just this one — §7 `A`).
-- `files_deleted` — count of `X` records written in this volume's section,
-  whether they remove an `F` or an `S` (§7 `X`) — likewise, may reference
-  any volume.
 - `total_files` — cumulative count of files active in the library as of
   this volume, i.e. the size of the fully reconstructed active view (§10)
   — **not** a raw running total of every `F` record ever written.
-  Superseded or deleted records are resolved the same way a full
-  reconstruction resolves them, so this can't be maintained by a plain
-  per-volume delta (§10). `S` records (§7 `S`) are never counted here — an
-  alias adds a new name, not new content; it's already accounted for
-  through its target.
+  Superseded, deleted, or renamed/relocated records are resolved the same
+  way a full reconstruction resolves them, so this can't be maintained by a
+  plain per-volume delta (§10). `S` records (§7 `S`) are never counted
+  here — an alias adds a new name, not new content; it's already accounted
+  for through its target. An `XD` (§7 `XD`) drops its entire subtree from
+  this count at once, the same as if every `F`/`S` record under it had its
+  own `XF`.
 - `total_size` — sum of `size` across that same active set; likewise
   unaffected by however many `S` aliases exist.
 - `volume_hash` — a checksum of exactly this volume's own `F` records,
@@ -245,16 +246,21 @@ and how an application can use them):
   that specific physical medium holds.
 - `last_dir_id` — highest `dir_id` assigned in the library as of this
   volume; unlike `total_files`/`total_size` this one is a simple monotonic
-  maximum, unaffected by `A`/`X` (§7 `D`).
+  maximum, unaffected by `AF`/`XF`/`XD`/`RD`/`RF` (§7 `D`).
 
-`S` additions themselves aren't tallied by any of the three counts above —
-there's no dedicated per-volume counter for aliases as of `! VERSION 1.0`;
-only their removal (via `X`) is folded into `files_deleted`.
+`files_added` is the only per-volume tally `! VERSION 1.0` keeps —
+`S` additions, and every correction (`AF`, `XF`, `XD`, `RD`, `RF`), have no
+dedicated counter of their own. Their effect only shows up indirectly,
+through how they move `total_files`/`total_size` between one `VOLUME_END`
+checkpoint and the next; a reader wanting to know how many corrections a
+given volume's section contains counts the `AF`/`XF`/`XD`/`RD`/`RF` lines in
+that section directly, the same way it would count anything else in the
+file.
 
 ```
 VOLUME_START|1|Music-001|2026-08-13_1232
 ...
-VOLUME_END|1|Music-001|2026-08-13_1232|9|0|0|9|70477923|6VJWG7TG73DXOYCYXY6R6UXYUU|4
+VOLUME_END|1|Music-001|2026-08-13_1232|9|9|70477923|6VJWG7TG73DXOYCYXY6R6UXYUU|4
 ```
 
 ### `D` — directory
@@ -348,43 +354,48 @@ volume a second time.
   counter as `F`'s `file_id`, not a separate numbering space — so
   `(volume_id, file_id)`, with `volume_id` derived positionally exactly
   like `F`'s (§7 `VOLUME_START`/`VOLUME_END`), addresses either an `F` or
-  an `S` uniformly. This is what lets `X` remove an alias the same way it
-  removes a file (§7 `X`).
+  an `S` uniformly. This is what lets `XF`/`RF` correct an alias the same
+  way they correct a file (§7 `XF`, §7 `RF`).
 - `dir_id` — where this alias lives in the library's tree (global, exactly
   like `F`'s `dir_id`, including `0` meaning the root, §7 `D`, §7 `F`).
-  Unlike `A`/`X`, `S` creates a brand-new tree position, so — unlike `A`/`X`
-  — it needs one.
+  Unlike `AF`/`XF`, `S` creates a brand-new tree position, so — unlike
+  `AF`/`XF` — it needs one.
 - `name` — this alias's own name at that position.
 - `target_volume_id`, `target_file_id` — the existing `F` record whose
   content this alias reaches for (can be on any volume, same pattern as
-  `A`/`X`, §3 `file_key`).
+  `AF`/`XF`, §3 `file_key`).
 
 `S` carries no `size`/`hash` of its own — the content it reaches for is
 already accounted for by its target's `F` record, so an alias adds a new
 name to the tree without adding new bytes or new counted content (§7
 `VOLUME_END`, §10).
 
-**Resolving a target through `A`/`X`.** An alias's target field identifies
-*which content* it reaches for, not a permanently fixed physical record: a
-reader resolves it the same way it resolves any other content in the
-library, through whatever `A`/`X` history applies to that content (§10
-"Read `A`/`X` before trusting `F`"). Concretely: if the target record is
-later superseded by an `A` (the archivist renamed/relocated that file —
-see below), the alias transparently follows to the new canonical record;
-if the target record is later marked `X` and no other copy of that content
-survives elsewhere in the library, the alias is dangling, exactly as it
-would be if the content were simply gone.
+**Resolving a target through `AF`/`XF`/`XD`.** An alias's target field
+identifies *which content* it reaches for, not a permanently fixed
+physical record: a reader resolves it the same way it resolves any other
+content in the library, through whatever `AF`/`XF`/`XD` history applies to
+that content (§10 "Read `AF`/`XF`/`XD`/`RD`/`RF` before trusting `F`/`D`").
+Concretely: if the target record is later superseded by an `AF` (a genuine
+second physical copy of that content is named canonical instead — see
+below), the alias transparently follows to the new canonical record; if
+the target record is later marked `XF` (or its containing directory is
+removed via `XD`) and no other copy of that content survives elsewhere in
+the library, the alias is dangling, exactly as it would be if the content
+were simply gone. `RF`/`RD` corrections to the target's own name/location
+don't affect the alias at all — it addresses the target by `file_key`, not
+by name, so the target can be renamed or relocated freely without touching
+anything that aliases it.
 
 **`S` is not how you rename or relocate a file.** If the same *file* (not
 a deliberate second copy) needs a different name or directory going
-forward, that's a job for `A`: write a new `F` record at the new
-name/location (referencing the same content) and name it canonical with
-`A` (§7 `A`, §9). `S` exists only for when the archivist wants the same
-content addressable from an additional place *without* writing it again —
-never as a substitute for `A`. The format can't tell these two intents
-apart mechanically — both start from "the same content, a new name" — so
-which one is correct is a matter of what the archivist actually meant, not
-something a parser can enforce.
+forward, that's a job for `RF`: correct the existing record's `dir_id`/
+`name` in place, without writing its content again (§7 `RF`). `S` exists
+only for when the archivist wants the same content addressable from an
+additional place *without* writing it again — never as a substitute for
+`RF`. The format can't tell these two intents apart mechanically — both
+start from "the same content, a new name" — so which one is correct is a
+matter of what the archivist actually meant, not something a parser can
+enforce.
 
 ```
 S|18|4|cover.jpg|1|1
@@ -395,25 +406,25 @@ S|18|4|cover.jpg|1|1
 folder's cover art, instead of archiving those bytes a second time; see
 §9.)
 
-### `A` — active
+### `AF` — active
 
 ```
-! RECORD A volume_id file_id datetime
+! RECORD AF volume_id file_id datetime
 ```
 
 Declares that `(volume_id, file_id)` is the canonical/preferred physical
-record to use for its content going forward. Unlike `D`/`F`/`S`, `A` can
+record to use for its content going forward. Unlike `D`/`F`/`S`, `AF` can
 point at a file on **any** volume (not just the current one). Typical use: the same
 content ends up archived more than once — possibly across several
 different volumes (matching `size`+`hash`, e.g. the same file re-added
-later under a different name/location, per §9) — `A` names exactly one of
+later under a different name/location, per §9) — `AF` names exactly one of
 those records as "the" file to present/use going forward. This does **not**
-require the other, superseded record(s) to be marked `X` — they can remain
+require the other, superseded record(s) to be marked `XF` — they can remain
 perfectly valid, readable archived copies; they're simply no longer the one
 pointed to as canonical. However many copies of that content exist
 archive-wide, exactly one stays counted in `total_files`/`total_size`'s
-active view once `A` names it (§7 `VOLUME_END`) — the rest drop out of that
-count without needing `X`.
+active view once `AF` names it (§7 `VOLUME_END`) — the rest drop out of that
+count without needing `XF`.
 
 - `volume_id`, `file_id` — the record being named canonical (§3 `file_key`).
   Always an `F` record, never an `S` (§7 `S`) — an alias holds no content
@@ -425,17 +436,17 @@ count without needing `X`.
   enclosing volume's `VOLUME_START`/`VOLUME_END` timestamp.
 
 ```
-A|2|6|2026-08-14_1111
+AF|2|6|2026-08-14_1111
 ```
 
-### `X` — deleted
+### `XF` — deleted (file/alias)
 
 ```
-! RECORD X volume_id file_id datetime
+! RECORD XF volume_id file_id datetime
 ```
 
 Declares that the record at `(volume_id, file_id)` must be skipped when
-reconstructing the library from that point on. Like `A`, it can reference
+reconstructing the library from that point on. Like `AF`, it can reference
 any volume's record. What "gone" means depends on what kind of record it
 is:
 
@@ -453,23 +464,151 @@ is:
   matches the enclosing volume's `VOLUME_START`/`VOLUME_END` timestamp.
 
 ```
-X|1|6|2026-08-14_1111
+XF|1|6|2026-08-14_1111
 ```
 
-`A` and `X` are independent mechanisms — a given correction may use one,
-the other, or both, but one does not imply the other. Together they're how
-BDEA supports corrections without rewriting write-once media: an old record
-is left physically in place; `A` can redirect which copy is treated as
-canonical, and `X` can flag a specific copy as gone.
+### `XD` — deleted (directory)
 
-`A` and `X` are both manual, archivist-issued corrections — nothing in the
-format writes them automatically from a `size`+`hash` match. The typical
-trigger is the archivist reviewing the same-content matches BDEA-Generator
-surfaces (§10) and deciding, case by case: rename/relocate a file going
-forward (write `A`), add an alias instead of writing the bytes again if
-the same content deliberately belongs in more than one place (write `S`,
-§7 `S`), record that a copy has gone bad (write `X`), or simply leave two
-independent files that happen to share content alone.
+```
+! RECORD XD dir_id datetime
+```
+
+The directory-scoped counterpart to `XF`: declares that `dir_id`, and
+everything beneath it in the library's tree — every descendant directory
+and every `F`/`S` record filed anywhere in that subtree, regardless of
+which volume(s) they were written on — must be skipped when reconstructing
+the library from that point on. Written when a whole branch is gone at
+once (e.g. the surviving, still-readable part of a damaged volume didn't
+include this branch), instead of writing one `XF` per file it contained.
+
+- `dir_id` — the directory being marked gone, and the root of the subtree
+  it takes with it (§7 `D`). Because `dir_id` is never reused (§7 `D`),
+  this alone is enough to identify the target — no companion field is
+  needed the way `XF` needs `volume_id` alongside `file_id`.
+- `datetime` — when this correction was appended to the index (§6
+  `datetime`); matches the enclosing volume's `VOLUME_START`/`VOLUME_END`
+  timestamp, exactly like `XF`.
+
+`XD` marks everything *currently* filed under `dir_id` as gone as of this
+correction — it is not a claim that `dir_id` itself is retired. A later
+volume can still file new `F`/`D` records under the same `dir_id`, exactly
+as it could before the `XD`; only what was already there at the time of
+the correction is affected.
+
+Like `XF`, this is a statement about the index's active view, not a claim
+about the medium's material condition — the format doesn't distinguish a
+truly unrecoverable copy from one an archivist simply chose to treat as
+gone.
+
+```
+XD|6|2026-08-20_0900
+```
+
+(From `Music-003`'s section in `samples/music.bdea` — the surviving,
+readable part of `Music-002`'s disc didn't include Sandra Bernardo's
+"Tropico Ideal (2018)" album, so `dir_id=6` and its five `F` records are
+dropped from the active view at once; see §9.)
+
+### `RD` — renamed/relocated (directory)
+
+```
+! RECORD RD dir_id new_parent_dir_id new_name datetime
+```
+
+Corrects an existing directory's `parent_dir_id` and/or `name` (§7 `D`)
+going forward, without writing any new `D`, `F`, or `S` record and without
+touching any archived bytes. Because the tree is built from
+`dir_id`/`parent_dir_id` links rather than names (§7 `D`), one `RD` moves
+or renames the entire subtree beneath `dir_id` at once — every file and
+subdirectory under it keeps referencing the same `dir_id`, so none of them
+needs correcting individually.
+
+- `dir_id` — the directory being corrected. Unchanged: `dir_id` is the
+  directory's permanent identity (§7 `D`); only its position/label in the
+  tree moves.
+- `new_parent_dir_id` — the corrected parent (§6 `new_parent_dir_id`);
+  repeat the existing `parent_dir_id` unchanged if this correction is a
+  pure rename.
+- `new_name` — the corrected name (§6 `new_name`); repeat the existing
+  `name` unchanged if this correction is a pure move.
+- `datetime` — when this correction was appended to the index (§6
+  `datetime`); matches the enclosing volume's `VOLUME_START`/`VOLUME_END`
+  timestamp, exactly like `XF`.
+
+If more than one `RD` targets the same `dir_id` over time, the one
+appearing latest in the cumulative log wins — a reader always resolves a
+directory's current `parent_dir_id`/`name` from the most recent `RD` that
+names it, or from its original `D` record if none exists (§10).
+
+```
+RD|3|9|(flac)|2026-08-20_0900
+RD|4|9|(mp3)|2026-08-20_0900
+```
+
+(From `Music-003`'s section in `samples/music.bdea` — a new grouping
+directory `D|9|2|Rafael Krux - The Epic Baroque Album` is introduced under
+`Rafael Krux` (`dir_id=2`), and the two format-folders that used to sit
+directly under it, `dir_id=3` and `dir_id=4`, are reparented under `9` and
+shortened to `(flac)`/`(mp3)` — both fields change in the same correction.
+Every `F`/`S` record already filed under `3`/`4` (§9, points 1–2) moves
+with them without a single one of those records being touched; see §9.)
+
+### `RF` — renamed/relocated (file/alias)
+
+```
+! RECORD RF volume_id file_id new_dir_id new_name datetime
+```
+
+Corrects an existing `F` or `S` record's `dir_id` and/or `name` going
+forward, without writing its content again. This is the mechanism for a
+pure naming or filing mistake: the record's `size`+`hash` (for an `F`) or
+target (for an `S`) never change, only where it sits in the tree and what
+it's called there.
+
+- `volume_id`, `file_id` — the record being corrected (§3 `file_key`);
+  addresses either an `F` or an `S`, the same way `AF`/`XF` do (§7 `S`).
+- `new_dir_id` — the corrected directory (§6 `new_dir_id`); repeat the
+  existing `dir_id` unchanged if this correction is a pure rename.
+- `new_name` — the corrected name (§6 `new_name`); repeat the existing
+  `name` unchanged if this correction is a pure move.
+- `datetime` — when this correction was appended to the index (§6
+  `datetime`); matches the enclosing volume's `VOLUME_START`/`VOLUME_END`
+  timestamp, exactly like `XF`.
+
+If more than one `RF` targets the same `(volume_id, file_id)` over time,
+the most recent one wins, the same way `RD` resolves for a `dir_id` (§10).
+`RF` is unrelated to `AF`: `AF` picks which of several independent physical
+copies of the *same content* is canonical; `RF` corrects where *one
+specific* record sits in the tree, whether or not any duplicate of it
+exists.
+
+```
+RF|1|18|4|folder.jpg|2026-08-20_0900
+```
+
+(From `Music-003`'s section in `samples/music.bdea` — renames the mp3
+folder's cover-art alias, `S|18|4|cover.jpg|1|1` from `Music-001` (§7 `S`),
+to `folder.jpg`; `dir_id` stays `4`, only `name` changes. Demonstrates `RF`
+correcting an `S` record, not just an `F`; see §9.)
+
+`AF`, `XF`, `XD`, `RD`, and `RF` are independent mechanisms — a given
+correction may use any combination of them, but none implies another.
+Together they're how BDEA supports corrections without rewriting
+write-once media: an old record is left physically in place; `AF` redirects
+which copy is treated as canonical, `XF`/`XD` flag a copy (or a whole
+branch) as gone, and `RD`/`RF` fix a naming or filing mistake in place.
+
+All five are manual, archivist-issued corrections — nothing in the format
+writes them automatically. `AF`/`S`/`XF` are the responses to a genuine
+same-`size`+`hash` match that BDEA-Generator surfaces (§10): name one copy
+canonical if both stay archived (write `AF`), add an alias instead of
+writing the bytes again if the content deliberately belongs in more than
+one place (write `S`, §7 `S`), record that a copy has gone bad (write
+`XF`, or `XD` if a whole directory went with it), or simply leave two
+independent files that happen to share content alone. A pure naming or
+filing mistake — no real duplicate involved — is corrected with `RD`/`RF`
+instead, which needs no new bytes and has nothing to do with duplicate
+detection.
 
 ## 8. Volume sections and growth over time
 
@@ -487,7 +626,7 @@ F|1|3|cover.jpg|125142|...
 ...
 S|18|4|cover.jpg|1|1
 
-VOLUME_END|1|Music-001|2026-08-13_1232|9|0|0|9|70477923|6VJWG7TG73DXOYCYXY6R6UXYUU|4
+VOLUME_END|1|Music-001|2026-08-13_1232|9|9|70477923|6VJWG7TG73DXOYCYXY6R6UXYUU|4
 
 # ----------------- Music-002 -----------------
 
@@ -497,26 +636,26 @@ D|5|1|Sandra Bernardo
 ...
 F|1|6|...
 
-A|2|6|2026-08-14_1111
-X|1|6|2026-08-14_1111
+AF|2|6|2026-08-14_1111
+XF|1|6|2026-08-14_1111
 
-VOLUME_END|2|Music-002|2026-08-14_1111|6|1|1|13|83620060|NMKRK63FVB7PPOLNTD7S5BL27A|6
+VOLUME_END|2|Music-002|2026-08-14_1111|6|13|83620060|NMKRK63FVB7PPOLNTD7S5BL27A|6
 ```
 
 Each new volume appends: one `VOLUME_START` line, `D` records for any
 directories that volume newly introduces (directories that already exist
 are not repeated), that volume's `F` records, optionally `S` aliases to
-content already archived, optionally `A`/`X` corrections (which may
-reference files on *earlier* volumes, not just the new one), and closes
-with a matching `VOLUME_END` line.
+content already archived, optionally `AF`/`XF`/`XD`/`RD`/`RF` corrections
+(which may reference files or directories from *earlier* volumes, not just
+the new one), and closes with a matching `VOLUME_END` line.
 
 **Important consequence of write-once media:** because a burned disc can't be
 rewritten, its embedded copy of the index is frozen at whatever the library
 looked like at burn time. Corrections made later only appear in the index
 copies written onto *subsequent* volumes (and in the working master copy on
 the computer building the archive) — an older disc's own copy will not show
-later `A`/`X` corrections. When reconciling state, prefer the copy from the
-highest-numbered (most recent) volume available.
+later `AF`/`XF`/`XD`/`RD`/`RF` corrections. When reconciling state, prefer
+the copy from the highest-numbered (most recent) volume available.
 
 ## 9. Worked example
 
@@ -532,8 +671,8 @@ Walking through [`samples/music.bdea`](samples/music.bdea):
    second physical copy: `S|18|4|cover.jpg|1|1` aliases the flac folder's
    `F|1|3|cover.jpg` instead of writing those bytes again (§7 `S`) — the
    deliberate-duplication case `S` exists for, as opposed to point 2 below,
-   which is a mistake corrected via `A`. Closing this volume's section,
-   `VOLUME_END|1|Music-001|2026-08-13_1232|9|0|0|9|70477923|6VJWG7TG73DXOYCYXY6R6UXYUU|4`
+   which is a mistake corrected via `AF`. Closing this volume's section,
+   `VOLUME_END|1|Music-001|2026-08-13_1232|9|9|70477923|6VJWG7TG73DXOYCYXY6R6UXYUU|4`
    counts `9` files, not `10` — the alias doesn't add to the tally (§7
    `VOLUME_END`). Its second-to-last field, `6VJWG7TG73DXOYCYXY6R6UXYUU`, is
    `volume_hash`: concatenate those same 9 `F` records' own `hash` values,
@@ -558,25 +697,25 @@ Walking through [`samples/music.bdea`](samples/music.bdea):
    warn the user, etc.) is implementation policy — see §10.
 3. At the end of the `Music-002` section, two *unrelated* corrections are
    recorded together:
-   - `A|2|6|2026-08-14_1111` — of the two now-known copies of the
+   - `AF|2|6|2026-08-14_1111` — of the two now-known copies of the
      "Classical Violin Concerto" content (`Music-001`'s `F|3|3` and
      `Music-002`'s `F|6|3` from point 2 above, same `size`+`hash`), this
      declares `Music-002`'s copy (`volume=2, file=6`) as the canonical one to
-     use going forward. `Music-001`'s copy isn't touched or marked `X` — it
+     use going forward. `Music-001`'s copy isn't touched or marked `XF` — it
      remains a valid archived copy, just no longer the presented/canonical
      one.
-   - `X|1|6|2026-08-14_1111` — a completely separate correction: it declares
+   - `XF|1|6|2026-08-14_1111` — a completely separate correction: it declares
      that `Music-001`'s file 6 (`05 Vivaldi Like Violin Solo.flac`) has
      become unreadable/lost on that disc. Since nothing else in the library
      shares its hash, that track is effectively lost from the archive unless
      recovered and re-added later.
-4. Closing `Music-002`'s section, `VOLUME_END|2|Music-002|2026-08-14_1111|6|1|1|13|83620060|NMKRK63FVB7PPOLNTD7S5BL27A|6`
-   records that volume's own tally (`6` files added, `1` change, `1`
-   deletion) alongside a checkpoint of the *whole* library. `total_files`
+4. Closing `Music-002`'s section, `VOLUME_END|2|Music-002|2026-08-14_1111|6|13|83620060|NMKRK63FVB7PPOLNTD7S5BL27A|6`
+   records that volume's own tally (`6` files added) alongside a checkpoint
+   of the *whole* library. `total_files`
    is `13`, not the `15` `F` records the two volumes have written between
    them (the `S` from point 1 was never one of those `15` to begin with)
-   — it already excludes `Music-001`'s `F|3|3` (superseded by the `A`
-   above) and `Music-001`'s `F|6|3` (lost per the `X` above):
+   — it already excludes `Music-001`'s `F|3|3` (superseded by the `AF`
+   above) and `Music-001`'s `F|6|3` (lost per the `XF` above):
    `15 - 1 - 1 = 13`. `total_size` (`83620060`) is the sum of `size` across
    that same 13-record active set, and `last_dir_id` (`6`, the final field)
    is the highest `dir_id` either volume has assigned so far. A reader that
@@ -588,6 +727,35 @@ Walking through [`samples/music.bdea`](samples/music.bdea):
    extend or combine with `Music-001`'s `volume_hash`, since (unlike
    `total_files`/`total_size`/`last_dir_id`) `volume_hash` is scoped per
    volume, not a whole-library checkpoint.
+5. **Music-003** is burned later still, and adds no new archived content at
+   all — its section is nothing but corrections, which is a perfectly valid
+   volume:
+   - `D|9|2|Rafael Krux - The Epic Baroque Album` introduces a new grouping
+     directory under `Rafael Krux` (`dir_id=2`), then
+     `RD|3|9|(flac)|2026-08-20_0900` and `RD|4|9|(mp3)|2026-08-20_0900`
+     (§7 `RD`) reparent the two existing format-folders under it and shorten
+     their names — the archivist decided the album name shouldn't be
+     repeated at both levels. Every `F`/`S` record `Music-001`/`Music-002`
+     already filed under `dir_id=3`/`4` relocates with them; none of those
+     records is touched.
+   - `RF|1|18|4|folder.jpg|2026-08-20_0900` (§7 `RF`) renames
+     `Music-001`'s `S|18|4|cover.jpg|1|1` alias to `folder.jpg`, without
+     touching its target or its `dir_id` — a pure naming fix, and a
+     concrete case of `RF` correcting an `S` rather than an `F`.
+   - `XD|6|2026-08-20_0900` (§7 `XD`) declares that Sandra Bernardo's
+     "Tropico Ideal (2018)" directory (`dir_id=6`, from `Music-002`) — and
+     the five `F` records filed under it — didn't survive whatever made
+     the archivist revisit that disc. No `XF` is needed per file.
+   - Closing this volume,
+     `VOLUME_END|3|Music-003|2026-08-20_0900|0|8|53853523|2QOYZWMPACZAJ2MABGMOZ6CCPY|9`
+     records `0` for `files_added` — no `F` record was written — while
+     `total_files` drops from `13` to `8` (the five files under the `XD`'d
+     `dir_id=6`) and `total_size` drops from `83620060` to `53853523` by
+     the same five records' combined `size`. `last_dir_id` becomes `9`,
+     the one new `D` this volume introduced. `volume_hash`
+     (`2QOYZWMPACZAJ2MABGMOZ6CCPY`) is the hash of an *empty* input (§7
+     `VOLUME_END`), since this volume's section contains no `F` record to
+     concatenate a hash from.
 
 ## 10. Notes for implementers (BDEA-Generator / BDEA-Browser)
 
@@ -618,30 +786,33 @@ applications against it — not additional format rules:
   - Either way, detecting a match is mechanical; deciding what to do about
     it isn't. BDEA-Generator's job is to surface a same-`size`+`hash`
     match to the archivist — e.g. "this looks like a duplicate of an
-    existing file:
-    rename/relocate it (`A`), alias it without writing the bytes again
-    (`S`, §7 `S`), or keep both as independent copies?" — not to decide and
-    write `A`/`S`/`X` on its own (§7).
-- **An `A`-superseded duplicate does not count as its own active file, and
-  an `S` alias never counts at all.** Once `A` names one record canonical
+    existing file: archive it anyway and name it canonical (`AF`), alias it
+    without writing the bytes again (`S`, §7 `S`), mark the existing copy
+    gone if it's actually bad (`XF`), or keep both as independent copies?"
+    — not to decide and write `AF`/`S`/`XF` on its own (§7). A pure naming
+    or filing mistake — nothing duplicated — isn't this flow at all; that's
+    `RD`/`RF` (§7 `RD`, §7 `RF`), issued whenever the archivist notices the
+    mistake, independent of duplicate detection.
+- **An `AF`-superseded duplicate does not count as its own active file, and
+  an `S` alias never counts at all.** Once `AF` names one record canonical
   among a set of same-content duplicates — however many volumes hold a
   copy — exactly that one counts toward `total_files`/`total_size`; every
   other record sharing that identity drops out of the active count, though
-  it stays physically valid and readable (§7 `A`). §9's worked example
+  it stays physically valid and readable (§7 `AF`). §9's worked example
   does this: `Music-001`'s `F|3|3` is excluded once `Music-002`'s `F|6|3`
-  is named canonical via `A`. `S` settles the question even more directly
+  is named canonical via `AF`. `S` settles the question even more directly
   — `Music-001`'s mp3-folder cover art (§9, point 1) was never a second
   `F` at all, so it was never in the count to begin with. Neither
   mechanism is mandatory, though: the format doesn't require every
-  same-`size`+`hash` match to get an `A` or become an `S`. If an archivist
+  same-`size`+`hash` match to get an `AF` or become an `S`. If an archivist
   ever leaves two independent `F` records with matching content
-  uncorrected — no `A`, no `S` — both stay counted; whether that's
-  deliberate or simply unreviewed is exactly the kind of call `A`/`S`
+  uncorrected — no `AF`, no `S` — both stay counted; whether that's
+  deliberate or simply unreviewed is exactly the kind of call `AF`/`S`
   exist to let a human make (see above), and the mechanics only care
   whether one was written, not why one hasn't been. Whether *every*
   detected duplicate gets reviewed and resolved one way or the other is a
   BDEA-Generator/archivist workflow question, related to the
-  physical-dedup decision above — but once `A` or `S` is written, the
+  physical-dedup decision above — but once `AF` or `S` is written, the
   counting rule itself is fixed, not a choice.
 - **`VOLUME_END`'s summary fields double as a rebuild checkpoint.** An
   application that keeps a persistent database mirroring the library,
@@ -655,10 +826,15 @@ applications against it — not additional format rules:
   copy than expected) and needs a full resync instead — rebuild the
   database from the index, rebuild the index from the database, or track
   down whichever `.bdea` copy is actually the newest (§8).
-- **Read `A`/`X` before trusting `F`.** The set of "currently active" files in
-  the library is the `F` records **not** covered by a later `X`, adjusted by
-  any `A` that names them explicitly. A correct reader processes the whole
-  cumulative log in order, not just the latest volume's own `F` lines.
+- **Read `AF`/`XF`/`XD`/`RD`/`RF` before trusting `F`/`D`.** The set of
+  "currently active" files in the library is the `F` records **not**
+  covered by a later `XF`, and not filed (directly or transitively) under a
+  directory covered by a later `XD`, adjusted by any `AF` that names them
+  explicitly. A file's or alias's presented `dir_id`/`name` is whatever the
+  most recent `RF` for that `(volume_id, file_id)` says, or its own `F`/`S`
+  record if no `RF` exists; a directory's presented `parent_dir_id`/`name`
+  resolves the same way through `RD`. A correct reader processes the whole
+  cumulative log in order, not just the latest volume's own `F`/`D` lines.
 - **Always parse the header first.** `! TYPE`/`! RECORD` declarations must be
   read before any data line, since they define the field layout for that
   file (§4). Don't hard-code field order from this document alone — treat
