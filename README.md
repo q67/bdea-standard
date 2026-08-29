@@ -19,9 +19,9 @@ behavior. Anyone may write software that reads or writes `.bdea` files
 under this specification, for any purpose, including commercial use, without
 asking permission.
 
-- **Specification:** [`BDEA_STANDARD.md`](BDEA_STANDARD.md) (English,
-  authoritative) · [`BDEA_STANDARD.ua.md`](BDEA_STANDARD.ua.md) (Ukrainian
-  translation)
+- **Specification:** [`BDEA-1.0_STANDARD.md`](BDEA-1.0_STANDARD.md) (English,
+  authoritative) · [`BDEA-1.0_STANDARD.ua.md`](BDEA-1.0_STANDARD.ua.md)
+  (Ukrainian translation)
 - **Worked example:** [`samples/music.bdea`](samples/music.bdea)
 - **License:** [CC BY 4.0](LICENSE)
 
@@ -62,7 +62,7 @@ F|2|3|...02 Classical Violin Concerto.flac|8541907|VUMGOS3L25V5JEP4LU6OI5PXQG|ba
 VOLUME_END|1|Music-001|2026-08-13_1232|9|0|0|9|70477923|6VJWG7TG73DXOYCYXY6R6UXYUU|4
 ```
 
-See [`BDEA_STANDARD.md`](BDEA_STANDARD.md) for the full grammar, and
+See [`BDEA-1.0_STANDARD.md`](BDEA-1.0_STANDARD.md) for the full grammar, and
 [`samples/music.bdea`](samples/music.bdea) for a complete worked example
 (two volumes, a duplicate-content case, and an active/deleted correction).
 
@@ -99,11 +99,11 @@ source.
 
 **Is there a reference implementation?**
 Not yet. The spec is deliberately implementation-agnostic; see
-[`BDEA-Standard/BDEA_STANDARD.md` §10](BDEA_STANDARD.md#10-notes-for-implementers-bdea-generator--bdea-browser)
+[`BDEA-Standard/BDEA-1.0_STANDARD.md` §10](BDEA-1.0_STANDARD.md#10-notes-for-implementers)
 for notes aimed at anyone building one.
 
 ## License
 
-The specification text (`BDEA_STANDARD.md`, `BDEA_STANDARD.ua.md`, and this
+The specification text (`BDEA-1.0_STANDARD.md`, `BDEA-1.0_STANDARD.ua.md`, and this
 README) is licensed under [CC BY 4.0](LICENSE) — share and adapt freely,
 including commercially, with attribution.
