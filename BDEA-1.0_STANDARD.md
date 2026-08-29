@@ -274,7 +274,7 @@ A logical directory in the library's namespace tree.
   `dir_id` is global, the parent may well have been declared by an earlier
   volume, not the current one.
 - `name` — directory name.
-- `extra` — optional, trailing (§7 preamble); free-form (§6 `extra`), e.g.
+- `extra?` — optional, trailing (§7 preamble); free-form (§6 `extra`), e.g.
   tags. Empty or omitted unless an application populates it.
 
 Directories form a single, stable, append-only namespace tree for the whole
@@ -321,7 +321,7 @@ regardless of which volume declared that directory.
 - `name` — file name (not identity, see §3).
 - `size`, `hash` — content identity (§3); used to detect duplicates already
   present anywhere else in the library and to verify integrity.
-- `extra` — optional, trailing (§7 preamble); free-form (§6 `extra`), e.g.
+- `extra?` — optional, trailing (§7 preamble); free-form (§6 `extra`), e.g.
   tags. Empty or omitted unless an application populates it.
 
 ```
@@ -425,7 +425,7 @@ count without needing `XF`.
   of its own, so it can never be *the* canonical physical copy of
   anything; canonical-for-content only makes sense among records that
   actually hold bytes.
-- `datetime` — optional but recommended (§6 `datetime`): when this
+- `datetime?` — optional but recommended (§6 `datetime`): when this
   correction was appended to the index — not a property of either physical
   copy. When present, matches the enclosing volume's
   `VOLUME_START`/`VOLUME_END` timestamp; when omitted, that volume
@@ -461,7 +461,7 @@ is:
   from that one tree position.
 
 - `volume_id`, `file_id` — the record being marked gone (§3 `file_key`).
-- `datetime` — optional but recommended (§6 `datetime`): when this
+- `datetime?` — optional but recommended (§6 `datetime`): when this
   correction was appended to the index — not when the medium actually
   failed or was noticed as bad. When present, matches the enclosing
   volume's `VOLUME_START`/`VOLUME_END` timestamp; when omitted, that
@@ -495,7 +495,7 @@ damaged volume didn't include this branch.
   Because `dir_id` is never reused (§7 `D`), this alone is enough to
   identify the target — no companion field is needed the way `XF` needs
   `volume_id` alongside `file_id`.
-- `datetime` — optional but recommended (§6 `datetime`): when this
+- `datetime?` — optional but recommended (§6 `datetime`): when this
   correction was appended to the index. When present, matches the
   enclosing volume's `VOLUME_START`/`VOLUME_END` timestamp, exactly like
   `XF`; when omitted, that volume timestamp is what a reader falls back
@@ -543,7 +543,7 @@ needs correcting individually.
   pure rename.
 - `new_name` — the corrected name (§6 `new_name`); repeat the existing
   `name` unchanged if this correction is a pure move.
-- `datetime` — optional but recommended (§6 `datetime`): when this
+- `datetime?` — optional but recommended (§6 `datetime`): when this
   correction was appended to the index. When present, matches the
   enclosing volume's `VOLUME_START`/`VOLUME_END` timestamp, exactly like
   `XF`; when omitted, that volume timestamp is what a reader falls back
@@ -583,7 +583,7 @@ it's called there.
   existing `dir_id` unchanged if this correction is a pure rename.
 - `new_name` — the corrected name (§6 `new_name`); repeat the existing
   `name` unchanged if this correction is a pure move.
-- `datetime` — optional but recommended (§6 `datetime`): when this
+- `datetime?` — optional but recommended (§6 `datetime`): when this
   correction was appended to the index. When present, matches the
   enclosing volume's `VOLUME_START`/`VOLUME_END` timestamp, exactly like
   `XF`; when omitted, that volume timestamp is what a reader falls back

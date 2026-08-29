@@ -103,7 +103,7 @@
 # dir_id may also be 0, same root meaning as F's dir_id.
 ! RECORD S file_id dir_id name target_volume_id target_file_id
 
-#  Activate File
+#  Active File
 # AF marks one physical file record as the active representation of the archived
 # content. It may reference a file stored on any volume.
 # AF always names an F record, never an S — an alias holds no content of its own
@@ -111,35 +111,37 @@
 # Whenever the same content exists as more than one F record (any number of
 # volumes), AF names exactly one as canonical; the rest drop out of the
 # library's active file count without needing XF.
-# This is required to support corrections.
-! RECORD AF volume_id file_id datetime
+# Like S, this is for libraries that try to avoid duplicate physical copies;
+# both AF and S are optional.
+! RECORD AF volume_id file_id datetime?
 
-#  Delete File/Symlink
+#  Delete File
 # XF marks one physical file or alias record as unavailable or excluded from
 # the active view of the library. It may reference a file stored on any volume.
-! RECORD XF volume_id file_id datetime
+! RECORD XF volume_id file_id datetime?
 
 #  Delete Directory
 # XD marks a directory, and everything beneath it in the tree (any volume),
 # as excluded from the active view. dir_id alone identifies the target,
 # since dir_id is never reused. Doesn't retire dir_id: later volumes may still file
-# new records under it.
-! RECORD XD dir_id datetime
+# new records under it. Pure shorthand for writing one XF per file in the
+# subtree; it has no other purpose.
+! RECORD XD dir_id datetime?
 
-#  Rename/relocate Directory
+#  Rename/Relocate Directory
 # RD corrects an existing directory's parent_dir_id and/or name going forward,
 # without writing any new D/F/S record. Because the tree is built
 # from dir_id/parent_dir_id links, one RD moves or renames the whole subtree at
 # once. The latest RD for a given dir_id wins.
-! RECORD RD dir_id new_parent_dir_id new_name datetime
+! RECORD RD dir_id new_parent_dir_id new_name datetime?
 
-#  Rename/relocate File/Symlink
+#  Rename/Relocate File
 # RF corrects an existing F or S record's dir_id and/or name going forward,
 # without rewriting its content. Addresses either an F or an S, like AF/XF.
 # Unrelated to AF: AF picks which duplicate is canonical, RF fixes where one
 # record sits in the tree. The latest RF for a given (volume_id, file_id)
 # wins.
-! RECORD RF volume_id file_id new_dir_id new_name datetime
+! RECORD RF volume_id file_id new_dir_id new_name datetime?
 
 
 VOLUME_START|1|Music-001|2026-08-13_1232
