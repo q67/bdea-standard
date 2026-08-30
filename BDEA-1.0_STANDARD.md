@@ -152,6 +152,13 @@ identity, since it's global across the library.
 
 ## 7. Record schema (`! RECORD`)
 
+The ten record tags fall into two kinds. Five introduce **new data** the
+library hasn't stated before — `VOLUME_START`/`VOLUME_END`, `D`, `F`, `S` —
+a new volume section, directory, file, or alias. The other five are
+**corrections** — `AF`, `XF`, `XD`, `RD`, `RF` — they introduce nothing new;
+each acts on a record one of the first five already wrote, marking it
+canonical, gone, or renamed/relocated.
+
 A field name ending in `?` in a `! RECORD` declaration marks it **optional
 and trailing**: a data line using that tag may omit it, having one fewer
 pipe-delimited field than declared. As of `! VERSION 1.0` this applies to
