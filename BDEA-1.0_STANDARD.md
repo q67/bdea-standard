@@ -15,7 +15,7 @@ its full logical structure, not just raw file blobs — without depending on the
 original computer, database, or software. The standard covers **only** the
 `.bdea` index file format: how a library's structure, volumes, directories,
 files, and their history are described in text. It does not cover physical
-disc layout, burning software, or backup policy.
+medium layout, media-writing software, or backup policy.
 
 ## 2. Core concepts
 
@@ -23,7 +23,7 @@ disc layout, burning software, or backup policy.
 |---|---|
 | **Archive** | The overall BDEA setup: one or more independent libraries. |
 | **Library** | A logically isolated collection of data (e.g. `Music`, `Documents`, `Photos`). Has its own directory namespace, its own `.bdea` index, and can be restored independently of any other library. |
-| **Volume** | One physical medium (one disc) belonging to a library. A library grows by adding volumes over time (`Music-001`, `Music-002`, ...). |
+| **Volume** | One physical medium (e.g. one disc or tape) belonging to a library. A library grows by adding volumes over time (`Music-001`, `Music-002`, ...). |
 
 **Libraries are fully isolated from each other.** A library never references
 another library, duplicates are never detected across libraries, and each
@@ -63,7 +63,7 @@ library — a file could equally be named `music.bdea`, `music-2026-08-23.bdea`,
 or anything else ending in `.bdea`; an application must never infer the
 library from the name.
 
-A `.bdea` file is UTF-8 text with two kinds of lines:
+A `.bdea` file is UTF-8 text with three kinds of lines:
 
 - **Declarations** — start with `!`, whitespace-separated tokens:
   `! KEYWORD value...`. These are machine-readable.
@@ -90,8 +90,8 @@ updated file is written onto that new volume too. This means:
 - The newest volume you have always holds the most complete/up-to-date index
   for the whole library (see §8 for the consequence of this on write-once
   media).
-- A library can, in principle, be browsed in full from a single disc's copy
-  of the index, even without the other physical discs present — that copy
+- A library can, in principle, be browsed in full from a single volume's copy
+  of the index, even without the other physical volumes present — that copy
   will say which volume physically holds any given file's bytes.
 
 ## 5. Header declarations
@@ -122,7 +122,7 @@ self-describing and independently parseable.
 
 | Type name | Kind | Notes |
 |---|---|---|
-| `dir_id` | `uint32` | Global across the library — assigned once per directory and never reused, regardless of which volume introduced it. Real values start at `1`; `0` is reserved to mean the library's implicit root (§7 `D`, `F`, `S`). |
+| `dir_id` | `uint32` | Global across the library — assigned once per directory and never reused, regardless of which volume introduced it. `0` always denotes the library's root, which needs no `D` record of its own (it has no name or parent to declare); every actual directory is numbered from `1` upward, in the order it's introduced (§7 `D`, `F`, `S`). |
 | `last_dir_id` | `uint32` | Same kind as `dir_id`; highest `dir_id` assigned in the library as of a given volume (§7 `VOLUME_END`). |
 | `new_dir_id` | `uint32` | Same kind as `dir_id`; the corrected directory an `RF` correction files a record under (§7 `RF`). |
 | `parent_dir_id` | `uint32` | `0` = root of the library's namespace. |
@@ -171,7 +171,7 @@ existing line to be rewritten.
 ! RECORD VOLUME_END volume_id volume_label datetime total_vol_files vol_files_size volume_hash last_dir_id
 ```
 
-`VOLUME_START` declares one volume (one physical disc) and opens its
+`VOLUME_START` declares one volume (one physical medium) and opens its
 section; `VOLUME_END` closes it. Every `D`, `F`, `S`, `AF`, `XF`, `XD`, `RD`,
 and `RF` record between a `VOLUME_START` and its matching `VOLUME_END` was
 written as part of producing that volume:
@@ -265,11 +265,11 @@ A logical directory in the library's namespace tree.
 
 - `dir_id` — global across the whole library: assigned once, the first time
   a volume introduces this directory, and never reused or re-assigned by a
-  later volume — even one that adds more files under it. Assigned values
-  start at `1`; the library's root is implicit and never gets a `D` record
-  of its own — `0` is reserved to mean "the root" wherever a `dir_id`-shaped
-  field references it (`parent_dir_id` below, and `F`/`S`'s own `dir_id`,
-  §7 `F`, §7 `S`).
+  later volume — even one that adds more files under it. `0` always denotes
+  the library's root — it has no name or parent of its own, so it needs no
+  `D` record; every actual directory is numbered from `1` upward, in the
+  order it's introduced, wherever a `dir_id`-shaped field references it
+  (`parent_dir_id` below, and `F`/`S`'s own `dir_id`, §7 `F`, §7 `S`).
 - `parent_dir_id` — the parent directory's `dir_id` (`0` = root). Because
   `dir_id` is global, the parent may well have been declared by an earlier
   volume, not the current one.
@@ -279,15 +279,29 @@ A logical directory in the library's namespace tree.
 
 Directories form a single, stable, append-only namespace tree for the whole
 library (not one tree per volume). Empty directories may be omitted.
-Because `dir_id` is global, a given logical folder (e.g. `Rafael Krux -
-The Epic Baroque Album`) is declared exactly once, by whichever volume
-first introduces it — a later volume that adds files under an
-already-existing folder does not re-declare it, it simply references the
-existing `dir_id` from its `F` records (see the worked example, §9).
+Because `dir_id` is global, a given logical folder (e.g. `Band - Album`) is
+declared exactly once, by whichever volume first introduces it — a later
+volume that adds files under an already-existing folder does not re-declare
+it, it simply references the existing `dir_id` from its `F` records (see the
+worked example, §9).
+
+**A `(parent_dir_id, name)` pair is permanently unique.** Two directories may
+share a `name` (with different parents) or share a `parent_dir_id` (with
+different names), but never both at once — no two directories may ever
+simultaneously carry the same `parent_dir_id` and the same `name`. This holds
+across the directory's entire history, not just its currently active
+content: even a directory whose entire subtree has since been marked gone
+via `XD` keeps occupying its `(parent_dir_id, name)` pair, since `XD` doesn't
+delete the directory itself (§7 `XD`). Continuing or recovering the *same*
+logical folder therefore reuses its existing `dir_id` rather than minting a
+new one under the same name and parent (see the `Sandra Bernardo` recovery,
+§9 point 6); a genuinely new directory that would otherwise collide with an
+existing name is resolved with `RD` instead (see the `(flac)`/`(mp3)` split,
+§9 point 5).
 
 ```
-D|1|0|Rafael Krux
-D|2|1|Rafael Krux - The Epic Baroque Album
+D|1|0|Band
+D|2|1|Band - Album
 ```
 
 ### `F` — File
@@ -501,11 +515,26 @@ damaged volume didn't include this branch.
   `XF`; when omitted, that volume timestamp is what a reader falls back
   to.
 
-`XD` marks everything *currently* filed under `dir_id` as gone as of this
-correction — it is not a claim that `dir_id` itself is retired. A later
-volume can still file new `F`/`D` records under the same `dir_id`, exactly
-as it could before the `XD`; only what was already there at the time of
-the correction is affected.
+`XD` does not delete the directory itself — `dir_id` remains a permanent
+logical path in the tree (§7 `D`), and its own `D` record (and any
+descendant `D` records) stays exactly as declared. What `XD` removes is
+content: every `F`/`S` record filed under `dir_id` at the time of this
+correction. A later volume can still file new `F`/`D` records under the
+same `dir_id`, exactly as it could before the `XD` — the directory keeps
+existing as a path; only what was filed in it at the time of the
+correction is gone.
+
+**Ordering within the same section.** Because `(parent_dir_id, name)` stays
+permanently claimed by a directory even after `XD` (§7 `D`), recovering the
+same logical folder — e.g. right after the volume holding its previous
+copies fails — reuses that directory's existing `dir_id` rather than minting
+a new one. If the *same* volume both retires a `dir_id` this way and re-files
+new `F`/`D` records under it, the `XD` must appear *before* those new
+records in that volume's section: a reader processes the log in order (§10),
+and `XD` wipes whatever is filed under `dir_id` at its own position in the
+log — records placed ahead of it would be wiped by the very `XD` meant to
+close out the old ones (see `Music-004`'s recovery of `Sandra Bernardo`, §9
+point 6).
 
 Like `XF`, this is a statement about the index's active view, not a claim
 about the medium's material condition — the format doesn't distinguish a
@@ -559,11 +588,12 @@ RD|2|1|Rafael Krux - The Epic Baroque Album (flac)|2026-08-20_0900
 ```
 
 (From `Music-003`'s section in `samples/music.bdea` — a new sibling folder,
-`D|6|1|Rafael Krux - The Epic Baroque Album (mp3)`, is introduced under
-`Rafael Krux` (`dir_id=1`), so this `RD` renames the existing flac folder,
-`dir_id=2`, to add the `(flac)` suffix — parent stays `1`, only `name`
-changes, since the two now need distinguishing names. Every `F`/`S` record
-already filed under `2` moves with it without being touched; see §9.)
+`D|6|1|Rafael Krux - The Epic Baroque Album (mp3)`, is about to be
+introduced under `Rafael Krux` (`dir_id=1`) later in this same section, so
+this `RD` renames the existing flac folder, `dir_id=2`, ahead of it to add
+the `(flac)` suffix — parent stays `1`, only `name` changes, since the two
+are about to need distinguishing names. Every `F`/`S` record already filed
+under `2` moves with it without being touched; see §9.)
 
 ### `RF` — Rename/Relocate File
 
@@ -641,30 +671,33 @@ VOLUME_END|1|Music-001|2026-08-13_1232|8|82235912|QE4TTLSX56ECJLO3JQMQW74ECQ|3
 
 VOLUME_START|2|Music-002|2026-08-14_1111
 
+AF|1|4|2026-08-14_1111
+XF|1|7|2026-08-14_1111
+
 D|4|0|Sandra Bernardo
 ...
 F|1|5|...
 
-AF|1|4|2026-08-14_1111
-XF|1|7|2026-08-14_1111
-
 VOLUME_END|2|Music-002|2026-08-14_1111|6|41474037|BV6N47NFZD6XHIFB2EH2HR625I|5
 ```
 
-Each new volume appends: one `VOLUME_START` line, `D` records for any
-directories that volume newly introduces (directories that already exist
-are not repeated), that volume's `F` records, optionally `S` aliases to
-content already archived, optionally `AF`/`XF`/`XD`/`RD`/`RF` corrections
-(which may reference files or directories from *earlier* volumes, not just
-the new one), and closes with a matching `VOLUME_END` line.
+Each new volume appends: one `VOLUME_START` line, optionally `AF`/`XF`/`XD`/
+`RD`/`RF` corrections (which may reference files or directories from
+*earlier* volumes, not just the new one — placed first in the section, since
+a correction must precede any new record it would otherwise wipe, §7 `XD`),
+`D` records for any directories that volume newly introduces (directories
+that already exist are not repeated), that volume's `F` records, optionally
+`S` aliases to content already archived, and closes with a matching
+`VOLUME_END` line.
 
-**Important consequence of write-once media:** because a burned disc can't be
-rewritten, its embedded copy of the index is frozen at whatever the library
-looked like at burn time. Corrections made later only appear in the index
-copies written onto *subsequent* volumes (and in the working master copy on
-the computer building the archive) — an older disc's own copy will not show
-later `AF`/`XF`/`XD`/`RD`/`RF` corrections. When reconciling state, prefer
-the copy from the highest-numbered (most recent) volume available.
+**Important consequence of write-once media:** because a volume, once
+physically written, can't be rewritten, its embedded copy of the index is
+frozen at whatever the library looked like when that volume was produced.
+Corrections made later only appear in the index copies written onto
+*subsequent* volumes (and in the working master copy on the computer
+building the archive) — an older volume's own copy will not show later
+`AF`/`XF`/`XD`/`RD`/`RF` corrections. When reconciling state, prefer the copy
+from the highest-numbered (most recent) volume available.
 
 ## 9. Worked example
 
@@ -713,8 +746,8 @@ volumes:
    application chooses to *do* about that (skip re-writing the bytes,
    write them anyway for redundancy, warn the user, etc.) is
    implementation policy — see §10.
-3. At the end of the `Music-002` section, three corrections are recorded
-   together:
+3. At the start of the `Music-002` section, right after `VOLUME_START`,
+   three corrections are recorded together:
    - `AF|1|4|2026-08-14_1111` — of the two now-known copies of the "03
      Baroque Chamber Strings" content (`Music-001`'s `F|4|2` and
      `Music-002`'s `F|6|2` from point 2 above, same `size`+`hash`), this
@@ -750,26 +783,26 @@ volumes:
    inactive, leaving `11` active records — but no field in either
    `VOLUME_END` states `11` directly.
 5. **Music-003** is burned later still, and adds no new archived content —
-   its section is nothing but a new directory, an alias, three genuinely
-   new (mp3-format) files, and corrections:
+   its section is nothing but corrections, a new directory, an alias, and
+   three genuinely new (mp3-format) files:
+   - `RD|2|1|Rafael Krux - The Epic Baroque Album (flac)|2026-08-20_0900`
+     (§7 `RD`) renames `dir_id=2` — parent unchanged at `1` — to add the
+     "(flac)" suffix, ahead of the "(mp3)" sibling this same section is
+     about to introduce below, so the two end up with distinguishing names.
+   - `RF|1|3|2|Rafael Krux - The Epic Baroque Album - 02 Classical Violin
+     Concerto.flac|2026-08-20_0900` (§7 `RF`) fixes `Music-001`'s `F|3|2`
+     naming mistake from point 1, dropping the stray "label" word;
+     `dir_id` stays `2`, unchanged — a pure naming fix, no duplicate
+     involved.
    - `D|6|1|Rafael Krux - The Epic Baroque Album (mp3)` introduces a new
      sibling folder directly under `Rafael Krux` (`dir_id=1`), alongside
-     the existing flac album folder (`dir_id=2`).
+     the existing flac album folder (`dir_id=2`, just renamed above).
    - `S|1|6|cover.jpg|1|1` aliases `Music-001`'s `F|1|2|cover.jpg` into the
      new mp3 folder instead of archiving those bytes a second time (§7
      `S`).
    - `F|2|6`, `F|3|6`, `F|4|6` add mp3 versions of three of the flac
      tracks — different bytes and `hash`, not duplicates of their flac
      counterparts despite sharing a piece of content conceptually.
-   - `RD|2|1|Rafael Krux - The Epic Baroque Album (flac)|2026-08-20_0900`
-     (§7 `RD`) renames `dir_id=2` — parent unchanged at `1` — to add the
-     "(flac)" suffix, now that a "(mp3)" sibling exists and the two need
-     distinguishing names.
-   - `RF|1|3|2|Rafael Krux - The Epic Baroque Album - 02 Classical Violin
-     Concerto.flac|2026-08-20_0900` (§7 `RF`) fixes `Music-001`'s `F|3|2`
-     naming mistake from point 1, dropping the stray "label" word;
-     `dir_id` stays `2`, unchanged — a pure naming fix, no duplicate
-     involved.
    - Closing this volume,
      `VOLUME_END|3|Music-003|2026-08-20_0900|3|11577606|24LRBHF2BOPABRU2MOGBRO3PX4|6`
      reports `3` new `F` records (`RD`/`RF`/`S` add no `F` of their own)
@@ -778,26 +811,34 @@ volumes:
      (`24LRBHF2BOPABRU2MOGBRO3PX4`) is built from only these `3` hashes.
 6. **Music-004** is burned after `Music-002`'s physical disc turns out to
    have failed entirely. Recovering from that means marking whatever lived
-   solely on that disc as gone, then re-archiving the same content fresh:
-   - `D|7|0|Sandra Bernardo` and `D|8|7|Sandra Bernardo - Tropico Ideal
-     (2018)` re-declare the same logical folders `Music-002` introduced —
-     with brand-new `dir_id`s, since a `dir_id` is never reused even when
-     recovering the exact same directory (§7 `D`).
-   - `F|1|8` through `F|5|8` re-add the same five mp3 tracks, with the
-     same `size`+`hash` as `Music-002`'s originals — genuinely the same
-     content, recovered from the archivist's still-intact source files,
-     not a coincidental match.
+   solely on that disc as gone, then re-archiving the same content fresh
+   under the *same* directories — since a `(parent_dir_id, name)` pair stays
+   permanently claimed even once a directory's content is marked gone via
+   `XD` (§7 `D`), recovering the same logical folder reuses its existing
+   `dir_id` rather than minting new ones:
    - `XF|2|6|2026-08-24_1000` marks `Music-002`'s stray duplicate flac
      (`volume=2, file=6`) gone too, since that whole disc is unreadable.
      It was already excluded from the active view by the `AF` in point 3
      — this doesn't change any count, it just keeps the index honest about
      which physical copies still exist.
-   - `XD|4|2026-08-24_1000` drops the entire `Sandra Bernardo` branch from
-     `Music-002` — `dir_id=4`, `dir_id=5`, and the five `F` records filed
-     under them — from the active view in one record, since none of it
-     survives anywhere else (§7 `XD`).
+   - `XD|4|2026-08-24_1000` drops the entire `Sandra Bernardo` branch —
+     `dir_id=4`, `dir_id=5`, and the five `F` records filed under them —
+     from the active view in one record, since none of it survives
+     anywhere else (§7 `XD`). Both corrections appear *before* this
+     volume's new `F` records below: an `XD` only wipes what's filed under
+     its `dir_id` as of its own position in the log (§7 `XD`), so the
+     recovered files need to come *after* it, not before, or this same
+     `XD` would wipe them out too.
+   - `F|1|5` through `F|5|5` then re-add the same five mp3 tracks — with
+     the same `size`+`hash` as `Music-002`'s originals, genuinely the same
+     content, recovered from the archivist's still-intact source files —
+     filed under the *same* `dir_id=5` (`Sandra Bernardo - Tropico Ideal
+     (2018)`) `Music-002` originally used, instead of a fresh one: neither
+     `dir_id=4` nor `dir_id=5` gets a new `D` record, since their
+     `(parent_dir_id, name)` pairs already belong to them permanently (§7
+     `D`) — `Music-004` introduces no new directory at all.
    - Closing this volume,
-     `VOLUME_END|4|Music-004|2026-08-24_1000|5|29766537|UEC7KTOKTAJNO643LVUXSCXCFA|8`
+     `VOLUME_END|4|Music-004|2026-08-24_1000|5|29766537|UEC7KTOKTAJNO643LVUXSCXCFA|6`
      reports this volume's own `5` `F` records and their `29766537`
      combined size — identical to what `Music-002`'s five mp3 tracks
      summed to, since it's the same content. Its `volume_hash`,
@@ -805,9 +846,10 @@ volumes:
      `Music-002`'s `volume_hash` *would* have been without its stray
      duplicate flac — not a coincidence or a bug: `volume_hash` depends
      only on the concatenated `hash` values, not on which volume or which
-     physical disc they happen to live on. `last_dir_id` becomes `8`, the
-     highest `dir_id` assigned so far. A reader resolving the active view
-     after this volume lands on the same `14` active files and the same
+     physical disc they happen to live on. `last_dir_id` stays `6` —
+     `Music-004` assigns no new `dir_id` at all, since it only reuses
+     `Music-002`'s existing ones. A reader resolving the active view after
+     this volume lands on the same `14` active files and the same
      `100244460` total byte size as after `Music-003` — `Music-002`'s
      failure and `Music-004`'s recovery of it cancel out exactly, which is
      the whole point of a correct recovery, even though neither
@@ -830,8 +872,8 @@ application.
 - **Duplicate detection is a library-wide `size`+`hash` lookup.** The
   format gives the means to detect that content already exists somewhere
   in the library (§3, §9); it intentionally does **not** say whether an
-  `F` record implies its bytes are physically burned onto that specific
-  volume's disc — this standard governs only the index file format (§1),
+  `F` record implies its bytes are physically written onto that specific
+  volume's medium — this standard governs only the index file format (§1),
   not application behavior. Whether to write a duplicate's bytes again
   (redundancy) or skip the physical write (space saving) is a policy
   decision for the application to make — the index format itself doesn't

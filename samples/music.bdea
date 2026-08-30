@@ -76,6 +76,10 @@
 # dir_id is global across the whole library, assigned once per directory.
 # dir_id values start at 1; the library's root is implicit (0) and has no D
 # record of its own.
+# A (parent_dir_id, name) pair is permanently unique across the library's
+# whole history — even a directory emptied by XD keeps occupying its pair.
+# Recovering the same logical folder reuses its existing dir_id instead of
+# minting a new one.
 # Empty directories may be omitted.
 # extra is optional/trailing, free-form (e.g. tags).
 ! RECORD D dir_id parent_dir_id name extra?
@@ -123,9 +127,13 @@
 #  Delete Directory
 # XD marks a directory, and everything beneath it in the tree (any volume),
 # as excluded from the active view. dir_id alone identifies the target,
-# since dir_id is never reused. Doesn't retire dir_id: later volumes may still file
-# new records under it. Pure shorthand for writing one XF per file in the
-# subtree; it has no other purpose.
+# since dir_id is never reused. Doesn't retire dir_id: later volumes may still
+# file new records under it — and since (parent_dir_id, name) stays
+# permanently claimed, recovering the same folder reuses this same dir_id.
+# Any such new records must appear after this XD within the same section:
+# XD only wipes what's filed under dir_id as of its own position in the log.
+# Pure shorthand for writing one XF per file in the subtree; it has no other
+# purpose.
 ! RECORD XD dir_id datetime?
 
 #  Rename/Relocate Directory
@@ -160,6 +168,9 @@ VOLUME_END|1|Music-001|2026-08-13_1232|8|82235912|QE4TTLSX56ECJLO3JQMQW74ECQ|3
 
 
 VOLUME_START|2|Music-002|2026-08-14_1111
+AF|1|4|2026-08-14_1111
+XF|1|7|2026-08-14_1111
+XD|3|2026-08-14_1111
 D|4|0|Sandra Bernardo
 D|5|4|Sandra Bernardo - Tropico Ideal (2018)
 F|1|5|01 - La Felicidad.mp3|5789174|6XTD7Q64HJADQD3C3CWDXVLAKX
@@ -168,31 +179,26 @@ F|3|5|03 - La Vida Se Va.mp3|5234963|7Z5RFQJ4HMGJJYFP5RE2BZVGIX
 F|4|5|04 - Me Quedo Con MI Amor.mp3|6679444|U2RWSVHNYEYJQLGFTVF5JEY3OJ
 F|5|5|05 - Mamita Rica.mp3|5944026|R5NJMQN4EKPCVC37YZVMT3AWL6
 F|6|2|Rafael Krux - The Epic Baroque Album - 03 Baroque Chamber Strings.flac|11707500|54IGSNGTYY4WWM4FKKQMEOLNGW|baroque,epic
-AF|1|4|2026-08-14_1111
-XF|1|7|2026-08-14_1111
-XD|3|2026-08-14_1111
 VOLUME_END|2|Music-002|2026-08-14_1111|6|41474037|BV6N47NFZD6XHIFB2EH2HR625I|5
 
 
 VOLUME_START|3|Music-003|2026-08-20_0900
+RD|2|1|Rafael Krux - The Epic Baroque Album (flac)|2026-08-20_0900
+RF|1|3|2|Rafael Krux - The Epic Baroque Album - 02 Classical Violin Concerto.flac|2026-08-20_0900
 D|6|1|Rafael Krux - The Epic Baroque Album (mp3)
 S|1|6|cover.jpg|1|1
 F|2|6|Rafael Krux - The Epic Baroque Album - 01 Baroque Harpsichord and Strings.mp3|3902095|RS626YOTIFNIYVEMH7FZD2BYFK
 F|3|6|Rafael Krux - The Epic Baroque Album - 02 Classical Violin Concerto.mp3|3395847|BMI2BUZ35I46MNKNTFDMBW55QG
 F|4|6|Rafael Krux - The Epic Baroque Album - 03 Baroque Chamber Strings.mp3|4279664|4XBSXZUKK23GXQ2AHJBUDFP7WL
-RD|2|1|Rafael Krux - The Epic Baroque Album (flac)|2026-08-20_0900
-RF|1|3|2|Rafael Krux - The Epic Baroque Album - 02 Classical Violin Concerto.flac|2026-08-20_0900
 VOLUME_END|3|Music-003|2026-08-20_0900|3|11577606|24LRBHF2BOPABRU2MOGBRO3PX4|6
 
 
 VOLUME_START|4|Music-004|2026-08-24_1000
-D|7|0|Sandra Bernardo
-D|8|7|Sandra Bernardo - Tropico Ideal (2018)
-F|1|8|01 - La Felicidad.mp3|5789174|6XTD7Q64HJADQD3C3CWDXVLAKX
-F|2|8|02 - Fruta.mp3|6118930|YNZMPOUP4OJJ7WBCK3WZU2YWFY
-F|3|8|03 - La Vida Se Va.mp3|5234963|7Z5RFQJ4HMGJJYFP5RE2BZVGIX
-F|4|8|04 - Me Quedo Con MI Amor.mp3|6679444|U2RWSVHNYEYJQLGFTVF5JEY3OJ
-F|5|8|05 - Mamita Rica.mp3|5944026|R5NJMQN4EKPCVC37YZVMT3AWL6
 XF|2|6|2026-08-24_1000
 XD|4|2026-08-24_1000
-VOLUME_END|4|Music-004|2026-08-24_1000|5|29766537|UEC7KTOKTAJNO643LVUXSCXCFA|8
+F|1|5|01 - La Felicidad.mp3|5789174|6XTD7Q64HJADQD3C3CWDXVLAKX
+F|2|5|02 - Fruta.mp3|6118930|YNZMPOUP4OJJ7WBCK3WZU2YWFY
+F|3|5|03 - La Vida Se Va.mp3|5234963|7Z5RFQJ4HMGJJYFP5RE2BZVGIX
+F|4|5|04 - Me Quedo Con MI Amor.mp3|6679444|U2RWSVHNYEYJQLGFTVF5JEY3OJ
+F|5|5|05 - Mamita Rica.mp3|5944026|R5NJMQN4EKPCVC37YZVMT3AWL6
+VOLUME_END|4|Music-004|2026-08-24_1000|5|29766537|UEC7KTOKTAJNO643LVUXSCXCFA|6
