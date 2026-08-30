@@ -26,14 +26,16 @@
 ! TYPE file_id uint64
 ! TYPE target_file_id uint64
 ! TYPE size uint64
-! TYPE name string max=120
-! TYPE new_name string max=120
+! TYPE dir_name string max=120
+! TYPE file_name string max=120
+! TYPE new_dir_name string max=120
+! TYPE new_file_name string max=120
 ! TYPE hash string max=32
 ! TYPE extra string max=256
 ! TYPE volume_id uint32
 ! TYPE target_volume_id uint32
 ! TYPE volume_label string max=120
-! TYPE datetime string max=15 YYYY-MM-DD_hhmm
+! TYPE date_time string max=15 YYYY-MM-DD_hhmm
 ! TYPE total_vol_files uint64
 ! TYPE vol_files_size uint64
 ! TYPE volume_hash string max=32
@@ -46,12 +48,12 @@
 # volume_id identifies the volume inside the library.
 # volume_id is an internal numeric identifier.
 # volume_label is the text printed or written on the physical archival medium.
-# datetime on VOLUME_START/VOLUME_END is when the index record itself was
+# date_time on VOLUME_START/VOLUME_END is when the index record itself was
 # generated, not the physical medium's write timing. Producing one volume's
-# index entries is a single fast step, so datetime is the same value
+# index entries is a single fast step, so date_time is the same value
 # on VOLUME_START, VOLUME_END, and any AF/XF/XD/RD/RF records within that
 # volume's section.
-# VOLUME_END repeats volume_label/datetime for corruption detection, then adds:
+# VOLUME_END repeats volume_label/date_time for corruption detection, then adds:
 # total_vol_files/vol_files_size = this volume's own F record count and byte
 # size (the only per-volume tallies kept; AF/XF/XD/RD/RF/S have no dedicated
 # counter of their own) — not the library's active-view totals, which need
@@ -63,8 +65,8 @@
 # with CONTENT_HASH_ALGORITHM; encode with CONTENT_HASH_ENCODING) rather than by
 # re-reading any file's content. Unlike last_dir_id, this is per-volume,
 # not a whole-library checkpoint.
-! RECORD VOLUME_START volume_id volume_label datetime
-! RECORD VOLUME_END volume_id volume_label datetime total_vol_files vol_files_size volume_hash last_dir_id
+! RECORD VOLUME_START volume_id volume_label date_time
+! RECORD VOLUME_END volume_id volume_label date_time total_vol_files vol_files_size volume_hash last_dir_id
 
 # A field name ending in "?" is optional and trailing: a data line may omit it
 # (one fewer pipe-delimited field than declared); a missing one is empty/absent.
@@ -76,13 +78,13 @@
 # dir_id is global across the whole library, assigned once per directory.
 # dir_id values start at 1; the library's root is implicit (0) and has no D
 # record of its own.
-# A (parent_dir_id, name) pair is permanently unique across the library's
+# A (parent_dir_id, dir_name) pair is permanently unique across the library's
 # whole history — even a directory emptied by XD keeps occupying its pair.
 # Recovering the same logical folder reuses its existing dir_id instead of
 # minting a new one.
 # Empty directories may be omitted.
 # extra is optional/trailing, free-form (e.g. tags).
-! RECORD D dir_id parent_dir_id name extra?
+! RECORD D dir_id parent_dir_id dir_name extra?
 
 #  File
 # The file identifier is unique only within the volume.
@@ -93,19 +95,19 @@
 # dir_id is the containing directory's global id; 0 means the file lives
 # directly in the library's root.
 # extra is optional/trailing, free-form (e.g. tags).
-! RECORD F file_id dir_id name size hash extra?
+! RECORD F file_id dir_id file_name size hash extra?
 
 #  Symlink
-# S is an alias: a new (dir_id, name) tree position that reaches for an
+# S is an alias: a new (dir_id, file_name) tree position that reaches for an
 # existing F record's content instead of archiving another physical copy.
 # file_id is drawn from the same per-volume counter as F's file_id (shared
 # numbering), so XF/RF can correct an S the same way they correct an F.
 # target_volume_id/target_file_id may point at an F on any volume; resolved
 # through AF/XF/XD like any other content, not a rigid pointer. RF corrections
-# to the target's own name/dir_id don't affect the alias, which addresses it
-# by file_key, not by name.
+# to the target's own file_name/dir_id don't affect the alias, which addresses
+# it by file_key, not by file_name.
 # dir_id may also be 0, same root meaning as F's dir_id.
-! RECORD S file_id dir_id name target_volume_id target_file_id
+! RECORD S file_id dir_id file_name target_volume_id target_file_id
 
 #  Active File
 # AF marks one physical file record as the active representation of the archived
@@ -117,39 +119,39 @@
 # library's active file count without needing XF.
 # Like S, this is for libraries that try to avoid duplicate physical copies;
 # both AF and S are optional.
-! RECORD AF volume_id file_id datetime?
+! RECORD AF volume_id file_id date_time?
 
 #  Delete File
 # XF marks one physical file or alias record as unavailable or excluded from
 # the active view of the library. It may reference a file stored on any volume.
-! RECORD XF volume_id file_id datetime?
+! RECORD XF volume_id file_id date_time?
 
 #  Delete Directory
 # XD marks a directory, and everything beneath it in the tree (any volume),
 # as excluded from the active view. dir_id alone identifies the target,
 # since dir_id is never reused. Doesn't retire dir_id: later volumes may still
-# file new records under it — and since (parent_dir_id, name) stays
+# file new records under it — and since (parent_dir_id, dir_name) stays
 # permanently claimed, recovering the same folder reuses this same dir_id.
 # Any such new records must appear after this XD within the same section:
 # XD only wipes what's filed under dir_id as of its own position in the log.
 # Pure shorthand for writing one XF per file in the subtree; it has no other
 # purpose.
-! RECORD XD dir_id datetime?
+! RECORD XD dir_id date_time?
 
 #  Rename/Relocate Directory
-# RD corrects an existing directory's parent_dir_id and/or name going forward,
-# without writing any new D/F/S record. Because the tree is built
+# RD corrects an existing directory's parent_dir_id and/or dir_name going
+# forward, without writing any new D/F/S record. Because the tree is built
 # from dir_id/parent_dir_id links, one RD moves or renames the whole subtree at
 # once. The latest RD for a given dir_id wins.
-! RECORD RD dir_id new_parent_dir_id new_name datetime?
+! RECORD RD dir_id new_parent_dir_id new_dir_name date_time?
 
 #  Rename/Relocate File
-# RF corrects an existing F or S record's dir_id and/or name going forward,
-# without rewriting its content. Addresses either an F or an S, like AF/XF.
-# Unrelated to AF: AF picks which duplicate is canonical, RF fixes where one
-# record sits in the tree. The latest RF for a given (volume_id, file_id)
-# wins.
-! RECORD RF volume_id file_id new_dir_id new_name datetime?
+# RF corrects an existing F or S record's dir_id and/or file_name going
+# forward, without rewriting its content. Addresses either an F or an S, like
+# AF/XF. Unrelated to AF: AF picks which duplicate is canonical, RF fixes
+# where one record sits in the tree. The latest RF for a given
+# (volume_id, file_id) wins.
+! RECORD RF volume_id file_id new_dir_id new_file_name date_time?
 
 
 VOLUME_START|1|Music-001|2026-08-13_1232

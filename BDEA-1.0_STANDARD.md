@@ -105,7 +105,7 @@ These appear once, near the top of the file, before any volume section.
 | `! ARCHIVE_TYPE` | `BDEA` | Format identifier. |
 | `! VERSION` | `1.0` | Format version (see §11). |
 | `! LIBRARY` | `Music` | Name of this library. |
-| `! NAME_ENCODING` | `utf-8` | Encoding used for file/directory `name` fields. |
+| `! NAME_ENCODING` | `utf-8` | Encoding used for `dir_name`/`file_name` fields. |
 | `! NAME_NORMALIZATION` | `NFC` | Unicode normalization applied to names. |
 | `! NAME_FORBIDDEN_CHARACTERS` | `/ \ : * ? " < > \|` | Characters names must not contain (superset of Windows/exFAT-reserved characters — a safe choice for media meant to be readable from any filesystem). |
 | `! CONTENT_HASH_ALGORITHM` | `md5` | Hash algorithm used to identify file content. |
@@ -130,14 +130,16 @@ self-describing and independently parseable.
 | `file_id` | `uint64` | Local to a volume. |
 | `target_file_id` | `uint64` | Same kind as `file_id`; the `F` record an `S` alias reaches for (§7 `S`). |
 | `size` | `uint64` | Bytes. |
-| `name` | `string max=120` | File or directory name. |
-| `new_name` | `string max=120` | Same kind as `name`; the corrected name written by an `RD`/`RF` correction (§7 `RD`, §7 `RF`). |
+| `dir_name` | `string max=120` | Directory name. |
+| `file_name` | `string max=120` | File name; also used by `S` aliases, which occupy a file-tree position of their own (§7 `S`). |
+| `new_dir_name` | `string max=120` | Same kind as `dir_name`; the corrected name an `RD` correction gives a directory (§7 `RD`). |
+| `new_file_name` | `string max=120` | Same kind as `file_name`; the corrected name an `RF` correction gives a file or alias (§7 `RF`). |
 | `hash` | `string max=32` | Encoded content hash (26 chars for base32 MD5; the extra headroom allows for a longer hash if `CONTENT_HASH_ALGORITHM` ever changes). |
 | `extra` | `string max=256` | Free-form field on `D`/`F` records (§7 `D`, §7 `F`), e.g. tags. Left empty by any application that has no use for it. |
 | `volume_id` | `uint32` | Local to the library. |
 | `target_volume_id` | `uint32` | Same kind as `volume_id`; the volume of the `F` record an `S` alias reaches for (§7 `S`). |
 | `volume_label` | `string max=120` | Human/physical label printed on the medium. |
-| `datetime` | `string max=15` | `YYYY-MM-DD_hhmm` — always when the *producing application* generated the surrounding index record(s), never the physical medium's own write timing (out of scope, §1). Producing one volume's index entries is treated as a single, fast step, so every `datetime` within that volume's section (`VOLUME_START`, `VOLUME_END`, any `AF`/`XF`/`XD`/`RD`/`RF`) conventionally carries the *same* value — it is not a start/end pair for how long the physical burn took. Mandatory on `VOLUME_START`/`VOLUME_END`; optional but recommended on `AF`/`XF`/`XD`/`RD`/`RF` (§7 preamble) — recommended because these timestamps help reconstruct the history of changes to a specific file or directory, optional because that same date can otherwise be inferred from the enclosing volume section. |
+| `date_time` | `string max=15` | `YYYY-MM-DD_hhmm` — always when the *producing application* generated the surrounding index record(s), never the physical medium's own write timing (out of scope, §1). Producing one volume's index entries is treated as a single, fast step, so every `date_time` within that volume's section (`VOLUME_START`, `VOLUME_END`, any `AF`/`XF`/`XD`/`RD`/`RF`) conventionally carries the *same* value — it is not a start/end pair for how long the physical burn took. Mandatory on `VOLUME_START`/`VOLUME_END`; optional but recommended on `AF`/`XF`/`XD`/`RD`/`RF` (§7 preamble) — recommended because these timestamps help reconstruct the history of changes to a specific file or directory, optional because that same date can otherwise be inferred from the enclosing volume section. |
 | `total_vol_files` | `uint64` | Number of `F` records physically written in a given volume's own section (§7 `VOLUME_END`). |
 | `vol_files_size` | `uint64` | Same kind as `size`; sum of `size` across that same volume's own `F` records — the size counterpart to `volume_hash` below (§7 `VOLUME_END`). |
 | `volume_hash` | `string max=32` | Same shape as `hash` (§6 `hash`); a per-volume checksum derived from other hashes already in the index rather than from a file's own content (§7 `VOLUME_END`). |
@@ -162,20 +164,20 @@ canonical, gone, or renamed/relocated.
 A field name ending in `?` in a `! RECORD` declaration marks it **optional
 and trailing**: a data line using that tag may omit it, having one fewer
 pipe-delimited field than declared. As of `! VERSION 1.0` this applies to
-`extra?` on `D` and `F` (below), and to `datetime?` on `AF`/`XF`/`XD`/`RD`/`RF`
+`extra?` on `D` and `F` (below), and to `date_time?` on `AF`/`XF`/`XD`/`RD`/`RF`
 (below) — every other field is mandatory. A conforming parser must accept a
 line with or without its optional trailing field, treating a missing one as
 empty/absent. This is what lets `extra` be added to a line later (e.g. to
-attach tags), or `datetime` be left off a correction whose date is already
-recoverable from its enclosing volume section (§6 `datetime`), without
+attach tags), or `date_time` be left off a correction whose date is already
+recoverable from its enclosing volume section (§6 `date_time`), without
 invalidating older lines that predate the field, and without requiring every
 existing line to be rewritten.
 
 ### `VOLUME_START` / `VOLUME_END` — volume boundary
 
 ```
-! RECORD VOLUME_START volume_id volume_label datetime
-! RECORD VOLUME_END volume_id volume_label datetime total_vol_files vol_files_size volume_hash last_dir_id
+! RECORD VOLUME_START volume_id volume_label date_time
+! RECORD VOLUME_END volume_id volume_label date_time total_vol_files vol_files_size volume_hash last_dir_id
 ```
 
 `VOLUME_START` declares one volume (one physical medium) and opens its
@@ -208,8 +210,8 @@ Fields shared by both records:
   repeated on `VOLUME_END` for the same corruption-detection reason as
   `volume_id` — if the two ends of a section ever disagree, something is
   wrong.
-- `datetime` — when the producing application generated this volume's index
-  entries (§6 `datetime`). Producing one volume's section is treated as a
+- `date_time` — when the producing application generated this volume's index
+  entries (§6 `date_time`). Producing one volume's section is treated as a
   single, fast step — distinct from, and typically much shorter than, the
   physical burn — so this carries the *same* value on `VOLUME_START`,
   `VOLUME_END`, and any `AF`/`XF`/`XD`/`RD`/`RF` records the same section
@@ -265,7 +267,7 @@ VOLUME_END|1|Music-001|2026-08-13_1232|8|82235912|QE4TTLSX56ECJLO3JQMQW74ECQ|3
 ### `D` — Directory
 
 ```
-! RECORD D dir_id parent_dir_id name extra?
+! RECORD D dir_id parent_dir_id dir_name extra?
 ```
 
 A logical directory in the library's namespace tree.
@@ -280,7 +282,7 @@ A logical directory in the library's namespace tree.
 - `parent_dir_id` — the parent directory's `dir_id` (`0` = root). Because
   `dir_id` is global, the parent may well have been declared by an earlier
   volume, not the current one.
-- `name` — directory name.
+- `dir_name` — directory name.
 - `extra?` — optional, trailing (§7 preamble); free-form (§6 `extra`), e.g.
   tags. Empty or omitted unless an application populates it.
 
@@ -292,13 +294,13 @@ volume that adds files under an already-existing folder does not re-declare
 it, it simply references the existing `dir_id` from its `F` records (see the
 worked example, §9).
 
-**A `(parent_dir_id, name)` pair is permanently unique.** Two directories may
-share a `name` (with different parents) or share a `parent_dir_id` (with
-different names), but never both at once — no two directories may ever
-simultaneously carry the same `parent_dir_id` and the same `name`. This holds
-across the directory's entire history, not just its currently active
+**A `(parent_dir_id, dir_name)` pair is permanently unique.** Two directories
+may share a `dir_name` (with different parents) or share a `parent_dir_id`
+(with different names), but never both at once — no two directories may ever
+simultaneously carry the same `parent_dir_id` and the same `dir_name`. This
+holds across the directory's entire history, not just its currently active
 content: even a directory whose entire subtree has since been marked gone
-via `XD` keeps occupying its `(parent_dir_id, name)` pair, since `XD` doesn't
+via `XD` keeps occupying its `(parent_dir_id, dir_name)` pair, since `XD` doesn't
 delete the directory itself (§7 `XD`). Continuing or recovering the *same*
 logical folder therefore reuses its existing `dir_id` rather than minting a
 new one under the same name and parent (see the `Sandra Bernardo` recovery,
@@ -314,7 +316,7 @@ D|2|1|Band - Album
 ### `F` — File
 
 ```
-! RECORD F file_id dir_id name size hash extra?
+! RECORD F file_id dir_id file_name size hash extra?
 ```
 
 An archived file record. **`volume_id` is not a field of `F`.** A file's
@@ -339,7 +341,7 @@ regardless of which volume declared that directory.
   file lives directly in the library's root, the same sentinel
   `parent_dir_id` uses (§7 `D`) — the root has no `D` record to reference
   instead.
-- `name` — file name (not identity, see §3).
+- `file_name` — file name (not identity, see §3).
 - `size`, `hash` — content identity (§3); used to detect duplicates already
   present anywhere else in the library and to verify integrity.
 - `extra?` — optional, trailing (§7 preamble); free-form (§6 `extra`), e.g.
@@ -353,7 +355,7 @@ F|2|2|...01 Baroque Harpsichord and Strings.flac|11124049|55HH6H7GAWRZZVD7FIC7LD
 ### `S` — Symlink
 
 ```
-! RECORD S file_id dir_id name target_volume_id target_file_id
+! RECORD S file_id dir_id file_name target_volume_id target_file_id
 ```
 
 An alias: a new tree position that reaches for content an `F` record
@@ -376,8 +378,8 @@ place at all.
   `AF`/`XF` address an existing record purely by `file_key` and need no
   `dir_id` at all; `S` is different because it creates a brand-new tree
   position, so it needs this field to say where that position is.
-- `name` — this alias's own name at that position; independent of the
-  target's own `name` (§7 `F`) — an alias may sit under the same name as
+- `file_name` — this alias's own name at that position; independent of the
+  target's own `file_name` (§7 `F`) — an alias may sit under the same name as
   its target or under a completely different one.
 - `target_volume_id`, `target_file_id` — the existing `F` record whose
   content this alias reaches for (can be on any volume, same pattern as
@@ -400,9 +402,9 @@ later marked `XF` (or its containing directory is removed via `XD`) and no
 other copy of that content survives elsewhere in the library, the alias is
 dangling, exactly as it would be if the content were simply gone. `RF`/`RD`
 corrections to the target's own name/location don't affect the alias at
-all — it addresses the target by `file_key`, not by name, so the target
-can be renamed or relocated freely without touching anything that aliases
-it.
+all — it addresses the target by `file_key`, not by `file_name`, so the
+target can be renamed or relocated freely without touching anything that
+aliases it.
 
 ```
 S|1|6|cover.jpg|1|1
@@ -416,7 +418,7 @@ folder's cover art, instead of archiving those bytes a second time; see
 ### `AF` — Active File
 
 ```
-! RECORD AF volume_id file_id datetime?
+! RECORD AF volume_id file_id date_time?
 ```
 
 Declares that `(volume_id, file_id)` is the canonical/preferred physical
@@ -446,7 +448,7 @@ count without needing `XF`.
   of its own, so it can never be *the* canonical physical copy of
   anything; canonical-for-content only makes sense among records that
   actually hold bytes.
-- `datetime?` — optional but recommended (§6 `datetime`): when this
+- `date_time?` — optional but recommended (§6 `date_time`): when this
   correction was appended to the index — not a property of either physical
   copy. When present, matches the enclosing volume's
   `VOLUME_START`/`VOLUME_END` timestamp; when omitted, that volume
@@ -465,7 +467,7 @@ going forward; see §9.)
 ### `XF` — Delete File
 
 ```
-! RECORD XF volume_id file_id datetime?
+! RECORD XF volume_id file_id date_time?
 ```
 
 Declares that the record at `(volume_id, file_id)` must be skipped when
@@ -482,7 +484,7 @@ is:
   from that one tree position.
 
 - `volume_id`, `file_id` — the record being marked gone (§3 `file_key`).
-- `datetime?` — optional but recommended (§6 `datetime`): when this
+- `date_time?` — optional but recommended (§6 `date_time`): when this
   correction was appended to the index — not when the medium actually
   failed or was noticed as bad. When present, matches the enclosing
   volume's `VOLUME_START`/`VOLUME_END` timestamp; when omitted, that
@@ -500,7 +502,7 @@ this content is lost unless recovered later; see §9.)
 ### `XD` — Delete Directory
 
 ```
-! RECORD XD dir_id datetime?
+! RECORD XD dir_id date_time?
 ```
 
 A shorthand for `XF`: declares every `F`/`S` record filed anywhere under
@@ -516,7 +518,7 @@ damaged volume didn't include this branch.
   Because `dir_id` is never reused (§7 `D`), this alone is enough to
   identify the target — no companion field is needed the way `XF` needs
   `volume_id` alongside `file_id`.
-- `datetime?` — optional but recommended (§6 `datetime`): when this
+- `date_time?` — optional but recommended (§6 `date_time`): when this
   correction was appended to the index. When present, matches the
   enclosing volume's `VOLUME_START`/`VOLUME_END` timestamp, exactly like
   `XF`; when omitted, that volume timestamp is what a reader falls back
@@ -531,7 +533,7 @@ same `dir_id`, exactly as it could before the `XD` — the directory keeps
 existing as a path; only what was filed in it at the time of the
 correction is gone.
 
-**Ordering within the same section.** Because `(parent_dir_id, name)` stays
+**Ordering within the same section.** Because `(parent_dir_id, dir_name)` stays
 permanently claimed by a directory even after `XD` (§7 `D`), recovering the
 same logical folder — e.g. right after the volume holding its previous
 copies fails — reuses that directory's existing `dir_id` rather than minting
@@ -560,10 +562,10 @@ active view at once, instead of writing one `XF` per file; see §9.)
 ### `RD` — Rename/Relocate Directory
 
 ```
-! RECORD RD dir_id new_parent_dir_id new_name datetime?
+! RECORD RD dir_id new_parent_dir_id new_dir_name date_time?
 ```
 
-Corrects an existing directory's `parent_dir_id` and/or `name` (§7 `D`)
+Corrects an existing directory's `parent_dir_id` and/or `dir_name` (§7 `D`)
 going forward, without writing any new `D`, `F`, or `S` record and without
 touching any archived bytes. Because the tree is built from
 `dir_id`/`parent_dir_id` links rather than names (§7 `D`), one `RD` moves
@@ -577,9 +579,9 @@ needs correcting individually.
 - `new_parent_dir_id` — the corrected parent (§6 `new_parent_dir_id`);
   repeat the existing `parent_dir_id` unchanged if this correction is a
   pure rename.
-- `new_name` — the corrected name (§6 `new_name`); repeat the existing
-  `name` unchanged if this correction is a pure move.
-- `datetime?` — optional but recommended (§6 `datetime`): when this
+- `new_dir_name` — the corrected name (§6 `new_dir_name`); repeat the
+  existing `dir_name` unchanged if this correction is a pure move.
+- `date_time?` — optional but recommended (§6 `date_time`): when this
   correction was appended to the index. When present, matches the
   enclosing volume's `VOLUME_START`/`VOLUME_END` timestamp, exactly like
   `XF`; when omitted, that volume timestamp is what a reader falls back
@@ -587,8 +589,8 @@ needs correcting individually.
 
 If more than one `RD` targets the same `dir_id` over time, the one
 appearing latest in the cumulative log wins — a reader always resolves a
-directory's current `parent_dir_id`/`name` from the most recent `RD` that
-names it, or from its original `D` record if none exists (§10).
+directory's current `parent_dir_id`/`dir_name` from the most recent `RD`
+that names it, or from its original `D` record if none exists (§10).
 
 ```
 RD|2|1|Rafael Krux - The Epic Baroque Album (flac)|2026-08-20_0900
@@ -598,17 +600,17 @@ RD|2|1|Rafael Krux - The Epic Baroque Album (flac)|2026-08-20_0900
 `D|6|1|Rafael Krux - The Epic Baroque Album (mp3)`, is about to be
 introduced under `Rafael Krux` (`dir_id=1`) later in this same section, so
 this `RD` renames the existing flac folder, `dir_id=2`, ahead of it to add
-the `(flac)` suffix — parent stays `1`, only `name` changes, since the two
-are about to need distinguishing names. Every `F`/`S` record already filed
+the `(flac)` suffix — parent stays `1`, only `dir_name` changes, since the
+two are about to need distinguishing names. Every `F`/`S` record already filed
 under `2` moves with it without being touched; see §9.)
 
 ### `RF` — Rename/Relocate File
 
 ```
-! RECORD RF volume_id file_id new_dir_id new_name datetime?
+! RECORD RF volume_id file_id new_dir_id new_file_name date_time?
 ```
 
-Corrects an existing `F` or `S` record's `dir_id` and/or `name` going
+Corrects an existing `F` or `S` record's `dir_id` and/or `file_name` going
 forward, without writing its content again. This is the mechanism for a
 pure naming or filing mistake: the record's `size`+`hash` (for an `F`) or
 target (for an `S`) never change, only where it sits in the tree and what
@@ -618,9 +620,9 @@ it's called there.
   addresses either an `F` or an `S`, the same way `AF`/`XF` do (§7 `S`).
 - `new_dir_id` — the corrected directory (§6 `new_dir_id`); repeat the
   existing `dir_id` unchanged if this correction is a pure rename.
-- `new_name` — the corrected name (§6 `new_name`); repeat the existing
-  `name` unchanged if this correction is a pure move.
-- `datetime?` — optional but recommended (§6 `datetime`): when this
+- `new_file_name` — the corrected name (§6 `new_file_name`); repeat the
+  existing `file_name` unchanged if this correction is a pure move.
+- `date_time?` — optional but recommended (§6 `date_time`): when this
   correction was appended to the index. When present, matches the
   enclosing volume's `VOLUME_START`/`VOLUME_END` timestamp, exactly like
   `XF`; when omitted, that volume timestamp is what a reader falls back
@@ -639,7 +641,7 @@ RF|1|3|2|Rafael Krux - The Epic Baroque Album - 02 Classical Violin Concerto.fla
 
 (From `Music-003`'s section in `samples/music.bdea` — fixes `Music-001`'s
 naming mistake on `F|3|2`, dropping a stray "label" from `...02 Classical
-Violin Concerto label.flac`; `dir_id` stays `2`, only `name` changes. A
+Violin Concerto label.flac`; `dir_id` stays `2`, only `file_name` changes. A
 pure naming fix, no duplicate involved; see §9.)
 
 `AF`, `XF`, `XD`, `RD`, and `RF` are independent mechanisms — a given
@@ -819,7 +821,7 @@ volumes:
 6. **Music-004** is burned after `Music-002`'s physical disc turns out to
    have failed entirely. Recovering from that means marking whatever lived
    solely on that disc as gone, then re-archiving the same content fresh
-   under the *same* directories — since a `(parent_dir_id, name)` pair stays
+   under the *same* directories — since a `(parent_dir_id, dir_name)` pair stays
    permanently claimed even once a directory's content is marked gone via
    `XD` (§7 `D`), recovering the same logical folder reuses its existing
    `dir_id` rather than minting new ones:
@@ -842,7 +844,7 @@ volumes:
      filed under the *same* `dir_id=5` (`Sandra Bernardo - Tropico Ideal
      (2018)`) `Music-002` originally used, instead of a fresh one: neither
      `dir_id=4` nor `dir_id=5` gets a new `D` record, since their
-     `(parent_dir_id, name)` pairs already belong to them permanently (§7
+     `(parent_dir_id, dir_name)` pairs already belong to them permanently (§7
      `D`) — `Music-004` introduces no new directory at all.
    - Closing this volume,
      `VOLUME_END|4|Music-004|2026-08-24_1000|5|29766537|UEC7KTOKTAJNO643LVUXSCXCFA|6`
@@ -874,8 +876,8 @@ application.
   identity.** Never use `file_id` alone as a cross-volume key; always pair
   it with `volume_id` (`file_key`). `dir_id` needs no such pairing — it's
   already a complete, stable identity on its own, and never needs
-  reconciling across volumes. Never use `name` to detect duplicates — use
-  `size`+`hash` for file identity.
+  reconciling across volumes. Never use `file_name` to detect duplicates —
+  use `size`+`hash` for file identity.
 - **Duplicate detection is a library-wide `size`+`hash` lookup.** The
   format gives the means to detect that content already exists somewhere
   in the library (§3, §9); it intentionally does **not** say whether an
@@ -909,22 +911,22 @@ application.
   which of those records are still active once later corrections are
   taken into account (see below). Confirming the library's active file
   count or byte size has no shortcut: resolve the full cumulative log.
-  `last_dir_id` and `datetime` on the newest `VOLUME_END`, however, are
+  `last_dir_id` and `date_time` on the newest `VOLUME_END`, however, are
   enough on their own to tell which of two `.bdea` files claiming the same
   library is the more current one — e.g. two same-named copies found on
   different volumes. Since `dir_id` only ever grows and is never reused
-  (§7 `D`), and `datetime` marks when that section was produced (§6
-  `datetime`), whichever file's newest `VOLUME_END` carries the higher
-  `last_dir_id` (or later `datetime`) is the more complete, more current
+  (§7 `D`), and `date_time` marks when that section was produced (§6
+  `date_time`), whichever file's newest `VOLUME_END` carries the higher
+  `last_dir_id` (or later `date_time`) is the more complete, more current
   copy.
 - **Resolving the active view.** The currently active files are the `F`
   records not covered by a later `XF`, and not filed — directly or
   transitively — under a directory covered by a later `XD`, adjusted by
   any `AF` that names one of them explicitly. A file's or alias's
-  presented `dir_id`/`name` is whatever the most recent `RF` for that
+  presented `dir_id`/`file_name` is whatever the most recent `RF` for that
   `(volume_id, file_id)` says, or its own `F`/`S` record if no `RF`
-  exists; a directory's presented `parent_dir_id`/`name` resolves the same
-  way through `RD`. Records and corrections aren't two separate passes —
+  exists; a directory's presented `parent_dir_id`/`dir_name` resolves the
+  same way through `RD`. Records and corrections aren't two separate passes —
   a correct reader processes the whole cumulative log in order, not just
   the latest volume's own `F`/`D` lines.
 - **Always parse the header first.** `! TYPE`/`! RECORD` declarations must be
