@@ -70,8 +70,8 @@ A `.bdea` file is UTF-8 text with three kinds of lines:
 - **Comments** — start with `#`, free text, ignored by parsers.
 - **Records** — data lines shaped `TAG|field1|field2|...`, pipe-delimited.
   `TAG` is whatever tag a `! RECORD` declaration (§7) defined — one or more
-  characters (`VOLUME_START`, `VOLUME_END`, `D`, `F`, `S`, `AF`, `XF`, `XD`,
-  `RD`, `RF` in the current schema).
+  characters (`VOLUME_START`, `VOLUME_END`, `AF`, `XF`, `XD`, `RD`, `RF`,
+  `D`, `F`, `S` in the current schema).
 
 Blank lines are allowed as visual separators (e.g. between volume sections).
 
@@ -154,12 +154,12 @@ identity, since it's global across the library.
 
 ## 7. Record schema (`! RECORD`)
 
-The ten record tags fall into two kinds. Five introduce **new data** the
-library hasn't stated before — `VOLUME_START`/`VOLUME_END`, `D`, `F`, `S` —
-a new volume section, directory, file, or alias. The other five are
-**corrections** — `AF`, `XF`, `XD`, `RD`, `RF` — they introduce nothing new;
-each acts on a record one of the first five already wrote, marking it
-canonical, gone, or renamed/relocated.
+The ten record tags fall into two kinds. Five are **corrections** — `AF`,
+`XF`, `XD`, `RD`, `RF` — they introduce nothing new; each acts on a record
+already written by one of the other five, marking it canonical, gone, or
+renamed/relocated. Those other five introduce **new data** the library
+hasn't stated before — `VOLUME_START`/`VOLUME_END`, `D`, `F`, `S` — a new
+volume section, directory, file, or alias.
 
 A field name ending in `?` in a `! RECORD` declaration marks it **optional
 and trailing**: a data line using that tag may omit it, having one fewer
@@ -181,10 +181,17 @@ existing line to be rewritten.
 ```
 
 `VOLUME_START` declares one volume (one physical medium) and opens its
-section; `VOLUME_END` closes it. Every `D`, `F`, `S`, `AF`, `XF`, `XD`, `RD`,
-and `RF` record between a `VOLUME_START` and its matching `VOLUME_END` was
-written as part of producing that volume:
+section; `VOLUME_END` closes it. Every `AF`, `XF`, `XD`, `RD`, `RF`, `D`,
+`F`, and `S` record between a `VOLUME_START` and its matching `VOLUME_END`
+was written as part of producing that volume — corrections first, then new
+data (§8):
 
+- `AF`/`XF`/`RF` records may appear here even though they can reference a
+  file on *any* volume (§7 `AF`, `XF`, `RF`) — their own explicit `volume_id`
+  field is what matters for them, not their position in the file. `XD`/`RD`
+  records likewise may reference a `dir_id` assigned by any earlier volume
+  (§7 `XD`, `RD`) — directories need no `volume_id` at all, since `dir_id`
+  is already global (§3, §10).
 - `D` records in this range declare any directories newly introduced by
   this volume (§7 `D`) — a directory that already exists in the library
   isn't repeated.
@@ -193,12 +200,6 @@ written as part of producing that volume:
 - `S` records in this range derive their `volume_id` from this section the
   same way `F` does (§7 `S`) — though the *content* they reach for may
   live on any volume, via their own explicit `target_volume_id`.
-- `AF`/`XF`/`RF` records may appear here even though they can reference a
-  file on *any* volume (§7 `AF`, `XF`, `RF`) — their own explicit `volume_id`
-  field is what matters for them, not their position in the file. `XD`/`RD`
-  records likewise may reference a `dir_id` assigned by any earlier volume
-  (§7 `XD`, `RD`) — directories need no `volume_id` at all, since `dir_id`
-  is already global (§3, §10).
 
 Fields shared by both records:
 
@@ -259,9 +260,11 @@ volume's section contains counts the `AF`/`XF`/`XD`/`RD`/`RF` lines in that
 section directly, the same way it would count anything else in the file.
 
 ```
-VOLUME_START|1|Music-001|2026-08-13_1232
+VOLUME_START|2|Music-002|2026-08-14_1111
+AF|1|4|2026-08-14_1111
+XF|1|7|2026-08-14_1111
 ...
-VOLUME_END|1|Music-001|2026-08-13_1232|8|82235912|QE4TTLSX56ECJLO3JQMQW74ECQ|3
+VOLUME_END|2|Music-002|2026-08-14_1111|6|41474037|BV6N47NFZD6XHIFB2EH2HR625I|5
 ```
 
 ### `D` — Directory
