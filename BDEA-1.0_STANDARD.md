@@ -895,10 +895,7 @@ application.
   writing the bytes again (`S`, §7 `S`), mark the existing copy gone if
   it's actually bad (`XF`), or keep both as independent copies?") is for
   the application to decide and act on, not something the format decides
-  on its own (§7). A pure naming or filing mistake — nothing duplicated —
-  isn't this flow at all; that's `RD`/`RF` (§7 `RD`, §7 `RF`), used
-  whenever the archivist notices the mistake, independent of duplicate
-  detection.
+  on its own (§7).
 - **Counting active files when `AF`/`S` are used.** An `AF` (§7 `AF`)
   names exactly one record canonical among a set of same-`size`+`hash` `F`
   records; for counting purposes, that whole set counts as a single active
@@ -932,11 +929,17 @@ application.
   same way through `RD`. Records and corrections aren't two separate passes —
   a correct reader processes the whole cumulative log in order, not just
   the latest volume's own `F`/`D` lines.
-- **Always parse the header first.** `! TYPE`/`! RECORD` declarations must be
-  read before any data line, since they define the field layout for that
-  file (§4). Don't hard-code field order from this document alone — treat
-  the in-file declarations as the source of truth for a specific file's
-  `VERSION`.
+- **Parse the header once per file, before any data.** `! TYPE`/`! RECORD`
+  declarations must be read before any data line, since they define the
+  field layout for that file (§4). This is a one-time step for a given
+  `.bdea` file, not a per-line one: parse the header once, cache the field
+  layout it declares, and reuse that cached layout for every data line that
+  follows in that same file. Only when a reader switches to a *different*
+  `.bdea` file — e.g. another library's index — must it repeat this step,
+  since that file's own header, not the previous file's, is the source of
+  truth for its field layout. Don't hard-code field order from this
+  document alone — treat each file's in-file declarations as the source of
+  truth for its `VERSION`.
 
 ## 11. Versioning
 
@@ -976,6 +979,6 @@ criteria above is major, including:
   correctly reconstruct the library.
 
 A reader should always trust the specific file's own declared `! VERSION`
-(§10 "Always parse the header first") over assumptions drawn from this
+(§10 "Parse the header once per file, before any data") over assumptions drawn from this
 document alone — this section describes how the two numbers are meant to
 behave, not a substitute for reading them.
