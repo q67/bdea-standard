@@ -1,8 +1,9 @@
 # BDEA Index Format Standard
 
 **BDEA — Backup Data Extended Archive.** A long-term, offline archive format for
-write-once/high-durability media (optical discs such as BD-R XL, LTO tape, and
-similar). This document specifies the `.bdea` index file format. It does not
+write-once/high-durability media (optical discs such as Blu-ray or DVD, tape
+systems such as LTO, and similar). This document specifies the `.bdea` index
+file format. It does not
 specify any particular application's behavior (see [§10](#10-notes-for-implementers)).
 
 This is the authoritative specification. See
@@ -52,7 +53,7 @@ Consequences of using content identity instead of the file name:
 
 The name is never authoritative — it's metadata, not identity.
 
-## 4. File structure overview
+## 4. `.bdea` index file structure overview
 
 **File naming.** A library's index file must have the `.bdea` extension;
 the rest of the filename is arbitrary — nothing in this standard requires
@@ -94,6 +95,20 @@ updated file is written onto that new volume too. This means:
   of the index, even without the other physical volumes present — that copy
   will say which volume physically holds any given file's bytes.
 
+**Record order is significant.** The logical state of a BDEA library is
+resolved by processing records in their order of appearance in the `.bdea`
+file. Within a volume section, each record updates the reader's working
+state immediately, in the order it appears — a correction affects the
+state from its position in the log onward, and a later correction to the
+same directory or file simply supersedes an earlier one; records unrelated
+to a given correction are never affected by it. A reader never needs to
+look ahead or rescan to find "the latest" correction — whichever one it
+applied most recently to a given target is, by construction, the current
+one. Across volume sections, a section's updates become part of the
+library's state only once that section's `VOLUME_END` is confirmed valid
+(§7 `VOLUME_START`/`VOLUME_END`); a section that never reaches a valid
+`VOLUME_END` contributes nothing. See §10 for the full reading algorithm.
+
 ## 5. Header declarations
 
 These appear once, near the top of the file, before any volume section.
@@ -125,7 +140,7 @@ self-describing and independently parseable.
 | `dir_id` | `uint32` | Global across the library — assigned once per directory and never reused, regardless of which volume introduced it. `0` always denotes the library's root, which needs no `D` record of its own (it has no name or parent to declare); every actual directory is numbered from `1` upward, in the order it's introduced (§7 `D`, `F`, `S`). |
 | `last_dir_id` | `uint32` | Same kind as `dir_id`; highest `dir_id` assigned in the library as of a given volume (§7 `VOLUME_END`). |
 | `new_dir_id` | `uint32` | Same kind as `dir_id`; the corrected directory an `RF` correction files a record under (§7 `RF`). |
-| `parent_dir_id` | `uint32` | `0` = root of the library's namespace. |
+| `parent_dir_id` | `uint32` | The containing (parent) directory's `dir_id`; `0` = root of the library's namespace. |
 | `new_parent_dir_id` | `uint32` | Same kind as `parent_dir_id`; the corrected parent an `RD` correction gives a directory (§7 `RD`). |
 | `file_id` | `uint64` | Local to a volume. |
 | `target_file_id` | `uint64` | Same kind as `file_id`; the `F` record an `S` alias reaches for (§7 `S`). |
@@ -136,7 +151,7 @@ self-describing and independently parseable.
 | `new_file_name` | `string max=120` | Same kind as `file_name`; the corrected name an `RF` correction gives a file or alias (§7 `RF`). |
 | `hash` | `string max=32` | Encoded content hash (26 chars for base32 MD5; the extra headroom allows for a longer hash if `CONTENT_HASH_ALGORITHM` ever changes). |
 | `extra` | `string max=256` | Free-form field on `D`/`F` records (§7 `D`, §7 `F`), e.g. tags. Left empty by any application that has no use for it. |
-| `volume_id` | `uint32` | Local to the library. |
+| `volume_id` | `uint32` | Unique within the library, assigned monotonically increasing, and never reused. |
 | `target_volume_id` | `uint32` | Same kind as `volume_id`; the volume of the `F` record an `S` alias reaches for (§7 `S`). |
 | `volume_label` | `string max=120` | Human/physical label printed on the medium. |
 | `date_time` | `string max=15` | `YYYY-MM-DD_hhmm` — always when the *producing application* generated the surrounding index record(s), never the physical medium's own write timing (out of scope, §1). Producing one volume's index entries is treated as a single, fast step, so every `date_time` within that volume's section (`VOLUME_START`, `VOLUME_END`, any `AF`/`XF`/`XD`/`RD`/`RF`) conventionally carries the *same* value — it is not a start/end pair for how long the physical burn took. Mandatory on `VOLUME_START`/`VOLUME_END`; optional but recommended on `AF`/`XF`/`XD`/`RD`/`RF` (§7 preamble) — recommended because these timestamps help reconstruct the history of changes to a specific file or directory, optional because that same date can otherwise be inferred from the enclosing volume section. |
@@ -206,7 +221,8 @@ Fields shared by both records:
 - `volume_id` — internal numeric id of the volume within the library;
   repeated on `VOLUME_END` so a reader (or a human skimming the file) can
   confirm which section is closing, and so a truncated or corrupted section
-  (a `VOLUME_START` with no matching `VOLUME_END`) can be detected.
+  (a `VOLUME_START` with no matching `VOLUME_END`) can be detected. Volume
+  sections MUST appear in strictly increasing `volume_id` order.
 - `volume_label` — the label written/printed on the physical medium;
   repeated on `VOLUME_END` for the same corruption-detection reason as
   `volume_id` — if the two ends of a section ever disagree, something is
@@ -217,6 +233,22 @@ Fields shared by both records:
   physical burn — so this carries the *same* value on `VOLUME_START`,
   `VOLUME_END`, and any `AF`/`XF`/`XD`/`RD`/`RF` records the same section
   contains; it is not a start/end pair for the physical burn's duration.
+
+A volume section without a valid matching `VOLUME_END` is incomplete. An
+incomplete volume MUST NOT be considered part of the reconstructed library
+state.
+
+`VOLUME_END` MUST validate against its opening `VOLUME_START`:
+
+- `VOLUME_END.volume_id` MUST equal the corresponding `VOLUME_START.volume_id`.
+- `VOLUME_END.volume_label` MUST equal the corresponding
+  `VOLUME_START.volume_label`.
+- `VOLUME_END.date_time` MUST equal the corresponding `VOLUME_START.date_time`.
+
+A reader applies a section's records to a working copy of the library's
+state as it reads them, and commits that working state into the library's
+durable state only once this validation succeeds — see §10 for the full
+reading algorithm.
 
 `VOLUME_END`-only fields — everything this volume itself physically
 contributed, plus `last_dir_id` as the one whole-library value cheap
@@ -388,6 +420,9 @@ place at all.
   content this alias reaches for (can be on any volume, same pattern as
   `AF`/`XF`, §3 `file_key`).
 
+The immediate target of an `S` MUST identify an existing `F` record. An `S`
+MUST NOT target another `S`.
+
 `S` carries no `size`/`hash` of its own — the content it reaches for is
 already accounted for by its target's `F` record, so an alias adds a new
 name to the tree without adding new bytes or new counted content (§7
@@ -418,7 +453,7 @@ S|1|6|cover.jpg|1|1
 folder's cover art, instead of archiving those bytes a second time; see
 §9.)
 
-### `AF` — Active File
+### `AF` — Canonical (Active) File
 
 ```
 ! RECORD AF volume_id file_id date_time?
@@ -457,6 +492,16 @@ count without needing `XF`.
   `VOLUME_START`/`VOLUME_END` timestamp; when omitted, that volume
   timestamp is what a reader falls back to, since a correction's date
   always coincides with its enclosing volume's date anyway.
+
+`AF` does not invalidate, delete, or otherwise remove any other `F` record.
+It only selects one surviving `F` record as the canonical representation of
+the content. At most one `F` record SHOULD be canonical for a given
+`size`+`hash` content at any point in the active view.
+
+If more than one `AF` is issued for the same content over time, each `AF`
+updates which record is currently canonical for that content — a later
+`AF` supersedes an earlier one, the same way `RD`/`RF` resolve for a
+directory or file (§4, §10).
 
 ```
 AF|1|4|2026-08-14_1111
@@ -542,7 +587,7 @@ same logical folder — e.g. right after the volume holding its previous
 copies fails — reuses that directory's existing `dir_id` rather than minting
 a new one. If the *same* volume both retires a `dir_id` this way and re-files
 new `F`/`D` records under it, the `XD` must appear *before* those new
-records in that volume's section: a reader processes the log in order (§10),
+records in that volume's section: a reader processes the log in order (§4, §10),
 and `XD` wipes whatever is filed under `dir_id` at its own position in the
 log — records placed ahead of it would be wiped by the very `XD` meant to
 close out the old ones (see `Music-004`'s recovery of `Sandra Bernardo`, §9
@@ -590,10 +635,13 @@ needs correcting individually.
   `XF`; when omitted, that volume timestamp is what a reader falls back
   to.
 
-If more than one `RD` targets the same `dir_id` over time, the one
-appearing latest in the cumulative log wins — a reader always resolves a
-directory's current `parent_dir_id`/`dir_name` from the most recent `RD`
-that names it, or from its original `D` record if none exists (§10).
+If more than one `RD` targets the same `dir_id` over time, each `RD`
+updates the directory's current `parent_dir_id`/`dir_name` in turn — a
+later `RD` supersedes an earlier one. A reader applies each `RD` to its
+working state as it is encountered, so the directory's current
+`parent_dir_id`/`dir_name` is simply whatever that state holds after the
+last `RD` applied so far, or its original `D` record if none has been
+applied yet (§4, §10).
 
 ```
 RD|2|1|Rafael Krux - The Epic Baroque Album (flac)|2026-08-20_0900
@@ -632,8 +680,9 @@ it's called there.
   to.
 
 If more than one `RF` targets the same `(volume_id, file_id)` over time,
-the most recent one wins, the same way `RD` resolves for a `dir_id` (§10).
-`RF` is unrelated to `AF`: `AF` picks which of several independent physical
+each `RF` updates that record's current `dir_id`/`file_name` in turn — a
+later `RF` supersedes an earlier one, applied the same way `RD` resolves
+for a `dir_id` (§4, §10). `RF` is unrelated to `AF`: `AF` picks which of several independent physical
 copies of the *same content* is canonical; `RF` corrects where *one
 specific* record sits in the tree, whether or not any duplicate of it
 exists.
@@ -919,16 +968,33 @@ application.
   `date_time`), whichever file's newest `VOLUME_END` carries the higher
   `last_dir_id` (or later `date_time`) is the more complete, more current
   copy.
-- **Resolving the active view.** The currently active files are the `F`
-  records not covered by a later `XF`, and not filed — directly or
-  transitively — under a directory covered by a later `XD`, adjusted by
-  any `AF` that names one of them explicitly. A file's or alias's
-  presented `dir_id`/`file_name` is whatever the most recent `RF` for that
-  `(volume_id, file_id)` says, or its own `F`/`S` record if no `RF`
-  exists; a directory's presented `parent_dir_id`/`dir_name` resolves the
-  same way through `RD`. Records and corrections aren't two separate passes —
-  a correct reader processes the whole cumulative log in order, not just
-  the latest volume's own `F`/`D` lines.
+- **Resolving the active view.** A reader maintains working state for the
+  library — the directory tree, and each file/alias's current
+  `dir_id`/`file_name` — and processes the log as a single left-to-right
+  pass with one commit point per volume section:
+  - *Within a section*, each record updates that working state
+    immediately, in the order it appears (§4): `D`/`F`/`S` add to it;
+    `RD`/`RF` overwrite the `parent_dir_id`/`dir_name` (for a directory) or
+    `dir_id`/`file_name` (for a file/alias) they target, a later one
+    always superseding an earlier one for the same target; `AF` updates
+    which record is canonical for its content; `XF`/`XD` remove a record
+    or subtree from the view. No lookahead or rescanning is ever needed —
+    whichever correction was applied most recently to a given target is,
+    by construction, the current one.
+  - *On `VOLUME_END`*, this validates against the section's own
+    `VOLUME_START` (§7 `VOLUME_START`/`VOLUME_END`). Only once that
+    validation succeeds does the section's working state become part of
+    the library's durable state; a section that never reaches a valid
+    `VOLUME_END` is incomplete and contributes nothing (§7
+    `VOLUME_START`/`VOLUME_END`). A later section builds on the durable
+    state committed so far, never on another section's still-pending one.
+
+  The currently active files are, at any point in this process, the `F`
+  records added so far that haven't since been removed by an `XF`/`XD`,
+  adjusted by whichever `AF` most recently named a canonical record for
+  their content. This keeps memory bounded to one volume section's worth
+  of pending state at a time — never the whole file, and never a second
+  pass.
 - **Parse the header once per file, before any data.** `! TYPE`/`! RECORD`
   declarations must be read before any data line, since they define the
   field layout for that file (§4). This is a one-time step for a given

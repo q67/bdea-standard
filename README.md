@@ -7,8 +7,9 @@
 
 **`.bdea` is a file extension for BDEA index files** — plain-text,
 self-describing catalogs that describe the contents of a long-term backup
-archive (BD-R XL optical discs, LTO tape, and similar write-once,
-high-durability media). A `.bdea` file lets an archive's full logical
+archive (optical discs such as Blu-ray or DVD, tape systems such as LTO,
+and similar write-once, high-durability media). A `.bdea` file lets an
+archive's full logical
 structure — volumes, directories, files, duplicates, deletions — be
 reconstructed later, without depending on the original computer, database,
 or software that produced it.
@@ -20,8 +21,7 @@ under this specification, for any purpose, including commercial use, without
 asking permission.
 
 - **Specification:** [`BDEA-1.0_STANDARD.md`](BDEA-1.0_STANDARD.md) (English,
-  authoritative) · [`BDEA-1.0_STANDARD.ua.md`](BDEA-1.0_STANDARD.ua.md)
-  (Ukrainian translation)
+  authoritative)
 - **Worked example:** [`samples/music.bdea`](samples/music.bdea)
 - **License:** [CC BY 4.0](LICENSE)
 
@@ -104,6 +104,6 @@ for notes aimed at anyone building one.
 
 ## License
 
-The specification text (`BDEA-1.0_STANDARD.md`, `BDEA-1.0_STANDARD.ua.md`, and this
-README) is licensed under [CC BY 4.0](LICENSE) — share and adapt freely,
+The specification text (`BDEA-1.0_STANDARD.md` and this README) is licensed
+under [CC BY 4.0](LICENSE) — share and adapt freely,
 including commercially, with attribution.
