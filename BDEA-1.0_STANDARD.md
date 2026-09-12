@@ -300,7 +300,6 @@ correction history first (§10 has the full recipe).
 
 ```
 VOLUME_START|2|Music-002|2026-08-14_1111
-AF|1|4|2026-08-14_1111
 XF|1|7|2026-08-14_1111
 ...
 VOLUME_END|2|Music-002|2026-08-14_1111|6|41474037|BV6N47NFZD6XHIFB2EH2HR625I|5
@@ -511,10 +510,10 @@ updates which record is currently canonical for that content — a later
 directory or file (§4, §10).
 
 ```
-AF|1|4|2026-08-14_1111
+AF|1|4|2026-08-20_0900
 ```
 
-(From `Music-002`'s section in `samples/music.bdea` — names `volume_id=1,
+(From `Music-003`'s section in `samples/music.bdea` — names `volume_id=1,
 file_id=4` canonical for content that also exists as a duplicate elsewhere
 in the library; see §9 for the full context.)
 
@@ -548,8 +547,9 @@ is:
 XF|1|7|2026-08-14_1111
 ```
 
-(From `Music-002`'s section in `samples/music.bdea` — marks `volume_id=1,
-file_id=7` unreadable on that disc; see §9 for the full context.)
+(From `Music-002`'s section in `samples/music.bdea` — forcibly excludes
+`volume_id=1, file_id=7`, a track mistakenly archived onto that disc, from
+the library; see §9 for the full context.)
 
 ### `XD` — Delete Directory
 
@@ -731,7 +731,6 @@ VOLUME_END|1|Music-001|2026-08-13_1232|8|82235912|QE4TTLSX56ECJLO3JQMQW74ECQ|3
 
 VOLUME_START|2|Music-002|2026-08-14_1111
 
-AF|1|4|2026-08-14_1111
 XF|1|7|2026-08-14_1111
 
 D|4|0|Artist Two
@@ -775,10 +774,12 @@ volumes:
    label.flac`, is filed with a naming mistake — a stray "label" in the
    name — corrected later in `Music-003` (point 5). One more file in the
    same folder, `F|7|2|Other Artist - Stray Track.flac`, is unrelated
-   content that happens to be filed there too; it's lost in `Music-002`
-   (point 3). `dir_id=3` (`.info`) holds one small non-music file,
-   `F|8|3|filedata.txt`; that whole folder is dropped in `Music-002` as
-   well. Closing this volume's section,
+   content that got mistakenly archived there too; it's forcibly excluded
+   from the library in `Music-002` (point 3) — not a case of the disc
+   itself going bad, but of catching a stray extraneous file after the
+   fact. `dir_id=3` (`.info`) holds one small non-music file,
+   `F|8|3|filedata.txt`; that file (not the folder itself) is dropped from
+   the active view in `Music-002` as well. Closing this volume's section,
    `VOLUME_END|1|Music-001|2026-08-13_1232|8|82235912|QE4TTLSX56ECJLO3JQMQW74ECQ|3`
    reports `8` (`total_vol_files`) and `82235912` (`vol_files_size`) — this
    volume's own `F` count and combined byte size, simple sums over the `8`
@@ -806,44 +807,63 @@ volumes:
    write them anyway for redundancy, warn the user, etc.) is
    implementation policy — see §10.
 3. At the start of the `Music-002` section, right after `VOLUME_START`,
-   three corrections are recorded together:
-   - `AF|1|4|2026-08-14_1111` — of the two now-known copies of the "03
-     Track Three" content (`Music-001`'s `F|4|2` and `Music-002`'s `F|6|2`
-     from point 2 above, same `size`+`hash`), this declares `Music-001`'s
-     original (`volume=1, file=4`) canonical going forward. `Music-002`'s
-     copy isn't touched or marked `XF` — it remains a valid archived copy,
-     just no longer the presented/canonical one.
-   - `XF|1|7|2026-08-14_1111` — an unrelated correction: it declares that
-     `Music-001`'s file 7 (`Other Artist - Stray Track.flac`) has become
-     unreadable/lost on that disc. Since nothing else in the library shares
-     its hash, that track is effectively lost from the archive unless
-     recovered and re-added later.
-   - `XD|3|2026-08-14_1111` — also unrelated: it drops `Music-001`'s
-     `.info` folder (`dir_id=3`) and its one file (`F|8|3|filedata.txt`)
-     from the active view at once.
+   two unrelated corrections are recorded together:
+   - `XF|1|7|2026-08-14_1111` — declares that `Music-001`'s file 7
+     (`Other Artist - Stray Track.flac`) is forcibly excluded from the
+     library. This isn't the case of pulling a volume back out and finding
+     part of it unreadable — it's the opposite: after burning a large
+     volume, this unrelated track turned out to have been mistakenly
+     included on it, and the next volume's section is where that mistake
+     gets corrected. Since nothing else in the library shares its hash,
+     that content is simply gone from the active library unless someone
+     deliberately re-adds it later.
+   - `XD|3|2026-08-14_1111` — drops the one file filed under `Music-001`'s
+     `.info` folder, `F|8|3|filedata.txt` (`dir_id=3`), from the active
+     view. The folder itself is not removed: `dir_id=3` stays a permanent,
+     valid logical path (§7 `XD`) — it's just empty of active content until
+     something new is filed under it.
+
+   Naming a canonical copy between `Music-001`'s `F|4|2` and this same
+   section's own `F|6|2` (point 2) does *not* happen here: corrections are
+   placed before a section's new `D`/`F`/`S` records (§8), so at this point
+   in the log `Music-002`'s own duplicate hasn't been written yet — an `AF`
+   issued this early would have to name a winner between a record that
+   already exists and one that doesn't yet. That correction waits until
+   `Music-003` (point 5), once both copies genuinely exist in the archived
+   history.
 4. Closing `Music-002`'s section,
    `VOLUME_END|2|Music-002|2026-08-14_1111|6|41474037|BV6N47NFZD6XHIFB2EH2HR625I|5`
    reports `6` for `total_vol_files` and `41474037` for `vol_files_size` —
    this volume's own `6` `F` records (the `5` new mp3 tracks plus the
    stray duplicate flac from point 2) and their combined `size`, counted
-   exactly as physically written, regardless of the `AF` that immediately
-   supersedes one of them (§7 `VOLUME_END`, §10) — `total_vol_files`/
-   `vol_files_size` are per-volume physical facts, not the library's
-   resolved active view. `volume_hash`, `BV6N47NFZD6XHIFB2EH2HR625I`, is
-   built the same way as `Music-001`'s but from only this volume's `6` `F`
-   hashes — it does not extend or combine with `Music-001`'s
-   `volume_hash`, since `volume_hash` is always scoped to one volume, never
-   a whole-library value. `last_dir_id` becomes `5`, the highest `dir_id`
-   either volume has assigned so far. A reader wanting the library's
-   *active* file count/size at this point resolves the full log instead
-   (§10): of the `14` `F` records written so far (`8` from `Music-001` plus
-   `6` from `Music-002`), `Music-001`'s `F|7|2` (`XF`'d), `Music-001`'s
-   `F|8|3` (`XD`'d), and `Music-002`'s `F|6|2` (superseded by `AF`) are
-   inactive, leaving `11` active records — but no field in either
-   `VOLUME_END` states `11` directly.
+   exactly as physically written — `total_vol_files`/`vol_files_size` are
+   per-volume physical facts, not the library's resolved active view.
+   `volume_hash`, `BV6N47NFZD6XHIFB2EH2HR625I`, is built the same way as
+   `Music-001`'s but from only this volume's `6` `F` hashes — it does not
+   extend or combine with `Music-001`'s `volume_hash`, since `volume_hash`
+   is always scoped to one volume, never a whole-library value.
+   `last_dir_id` becomes `5`, the highest `dir_id` either volume has
+   assigned so far. A reader wanting the library's *active* file
+   count/size at this point resolves the full log instead (§10): of the
+   `14` `F` records written so far (`8` from `Music-001` plus `6` from
+   `Music-002`), only `Music-001`'s `F|7|2` (`XF`'d) and `Music-001`'s
+   `F|8|3` (`XD`'d) are inactive so far — `Music-002`'s `F|6|2` duplicate
+   stays active too, since the `AF` choosing between it and `Music-001`'s
+   `F|4|2` hasn't been issued yet (point 3) — leaving `12` active records
+   — but no field in either `VOLUME_END` states `12` directly.
 5. **Music-003** is burned later still, and adds no new archived content —
    its section is nothing but corrections, a new directory, an alias, and
    three genuinely new (mp3-format) files:
+   - `AF|1|4|2026-08-20_0900` — of the two now-known copies of the "03
+     Track Three" content (`Music-001`'s `F|4|2` and `Music-002`'s `F|6|2`
+     from point 2), this declares `Music-001`'s original (`volume=1,
+     file=4`) canonical going forward. `Music-002`'s copy isn't touched or
+     marked `XF` — it remains a valid archived copy, just no longer the
+     presented/canonical one. This is recorded here, in `Music-003`, rather
+     than back in `Music-002` where the duplicate was created (point 3):
+     by now both copies are already closed-out history, so the correction
+     genuinely follows both records it names instead of preceding one of
+     them.
    - `RD|2|1|Artist One - Album One (flac)|2026-08-20_0900` (§7 `RD`)
      renames `dir_id=2` — parent unchanged at `1` — to add the "(flac)"
      suffix, ahead of the "(mp3)" sibling this same section is about to
@@ -863,8 +883,8 @@ volumes:
      counterparts despite sharing a piece of content conceptually.
    - Closing this volume,
      `VOLUME_END|3|Music-003|2026-08-20_0900|3|11577606|24LRBHF2BOPABRU2MOGBRO3PX4|6`
-     reports `3` new `F` records (`RD`/`RF`/`S` add no `F` of their own)
-     and `11577606` for their combined size. `last_dir_id` becomes `6`,
+     reports `3` new `F` records (`AF`/`RD`/`RF`/`S` add no `F` of their
+     own) and `11577606` for their combined size. `last_dir_id` becomes `6`,
      the one new `D` this volume introduced. `volume_hash`
      (`24LRBHF2BOPABRU2MOGBRO3PX4`) is built from only these `3` hashes.
 6. **Music-004** is burned after `Music-002`'s physical disc turns out to
@@ -876,17 +896,18 @@ volumes:
    `dir_id` rather than minting new ones:
    - `XF|2|6|2026-08-24_1000` marks `Music-002`'s stray duplicate flac
      (`volume=2, file=6`) gone too, since that whole disc is unreadable.
-     It was already excluded from the active view by the `AF` in point 3
+     It was already excluded from the active view by the `AF` in point 5
      — this doesn't change any count, it just keeps the index honest about
      which physical copies still exist.
-   - `XD|4|2026-08-24_1000` drops the entire `Artist Two` branch —
-     `dir_id=4`, `dir_id=5`, and the five `F` records filed under them —
-     from the active view in one record, since none of it survives
-     anywhere else (§7 `XD`). Both corrections appear *before* this
-     volume's new `F` records below: an `XD` only wipes what's filed under
-     its `dir_id` as of its own position in the log (§7 `XD`), so the
-     recovered files need to come *after* it, not before, or this same
-     `XD` would wipe them out too.
+   - `XD|4|2026-08-24_1000` drops the five `F` records filed anywhere under
+     the `Artist Two` branch (`dir_id=4` and its child `dir_id=5`) from the
+     active view in one record, since none of that content survives
+     anywhere else (§7 `XD`) — `dir_id=4`/`dir_id=5` themselves aren't
+     removed, just left empty of active content. Both corrections appear
+     *before* this volume's new `F` records below: an `XD` only wipes
+     what's filed under its `dir_id` as of its own position in the log
+     (§7 `XD`), so the recovered files need to come *after* it, not
+     before, or this same `XD` would wipe them out too.
    - `F|1|5` through `F|5|5` then re-add the same five mp3 tracks — with
      the same `size`+`hash` as `Music-002`'s originals, genuinely the same
      content, recovered from the archivist's still-intact source files —
