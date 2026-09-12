@@ -11,7 +11,7 @@ Initial public release.
 - `! VERSION` is `MAJOR.MINOR`; see `BDEA-1.0_STANDARD.md` §11 for what
   qualifies as a minor (backward-compatible) vs. a major (breaking) change.
 - `! TYPE`/`! RECORD` schema as specified in `BDEA-1.0_STANDARD.md` §6–§7:
-  `VOLUME_START`/`VOLUME_END`, `D`, `F`, `S`, `AF`, `XF`, `XD`, `RD`, `RF`.
+  `VOLUME_START`/`VOLUME_END`, `AF`, `XF`, `XD`, `RD`, `RF`, `D`, `F`, `S`.
 - Index filenames only require the `.bdea` extension — the rest of the
   name is unconstrained; the `! LIBRARY` header, not the filename,
   identifies which library a file describes.

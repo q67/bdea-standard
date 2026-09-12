@@ -154,7 +154,7 @@ self-describing and independently parseable.
 | `volume_id` | `uint32` | Unique within the library, assigned monotonically increasing, and never reused. |
 | `target_volume_id` | `uint32` | Same kind as `volume_id`; the volume of the `F` record an `S` alias reaches for (§7 `S`). |
 | `volume_label` | `string max=120` | Human/physical label printed on the medium. |
-| `date_time` | `string max=15` | `YYYY-MM-DD_hhmm` — always when the *producing application* generated the surrounding index record(s), never the physical medium's own write timing (out of scope, §1). Producing one volume's index entries is treated as a single, fast step, so every `date_time` within that volume's section (`VOLUME_START`, `VOLUME_END`, any `AF`/`XF`/`XD`/`RD`/`RF`) conventionally carries the *same* value — it is not a start/end pair for how long the physical burn took. Mandatory on `VOLUME_START`/`VOLUME_END`; optional but recommended on `AF`/`XF`/`XD`/`RD`/`RF` (§7 preamble) — recommended because these timestamps help reconstruct the history of changes to a specific file or directory, optional because that same date can otherwise be inferred from the enclosing volume section. |
+| `date_time` | `string max=15` | `YYYY-MM-DD_hhmm` — always when the *producing application* generated the surrounding index record(s), never the physical medium's own write timing (out of scope, §1). Producing one volume's index entries is treated as a single, fast step, so every `date_time` within that volume's section (`VOLUME_START`, `VOLUME_END`, any `AF`/`XF`/`XD`/`RD`/`RF`) conventionally carries the *same* value — it is not a start/end pair for how long the physical burn took. Mandatory on `VOLUME_START`/`VOLUME_END`, and optional but recommended on `AF`/`XF`/`XD`/`RD`/`RF` (§7 preamble) — recommended because these timestamps help reconstruct the history of changes to a specific file or directory, optional because that same date can otherwise be inferred from the enclosing volume section. |
 | `total_vol_files` | `uint64` | Number of `F` records physically written in a given volume's own section (§7 `VOLUME_END`). |
 | `vol_files_size` | `uint64` | Same kind as `size`; sum of `size` across that same volume's own `F` records — the size counterpart to `volume_hash` below (§7 `VOLUME_END`). |
 | `volume_hash` | `string max=32` | Same shape as `hash` (§6 `hash`); a per-volume checksum derived from other hashes already in the index rather than from a file's own content (§7 `VOLUME_END`). |
@@ -202,8 +202,9 @@ was written as part of producing that volume — corrections first, then new
 data (§8):
 
 - `AF`/`XF`/`RF` records may appear here even though they can reference a
-  file on *any* volume (§7 `AF`, `XF`, `RF`) — their own explicit `volume_id`
-  field is what matters for them, not their position in the file. `XD`/`RD`
+  file on any *earlier* volume (§7 `AF`, `XF`, `RF`) — their own explicit
+  `volume_id` field is what matters for them, not their position in the
+  file. `XD`/`RD`
   records likewise may reference a `dir_id` assigned by any earlier volume
   (§7 `XD`, `RD`) — directories need no `volume_id` at all, since `dir_id`
   is already global (§3, §10).
@@ -291,6 +292,12 @@ in the active view; a reader wanting to know how many corrections a given
 volume's section contains counts the `AF`/`XF`/`XD`/`RD`/`RF` lines in that
 section directly, the same way it would count anything else in the file.
 
+In practice, these two fields (together with `volume_hash`) exist to make a
+volume's physical medium independently checkable: re-reading that volume's
+`F` records and recomputing their `size`/`hash` lets a verifier confirm the
+medium still matches what the index recorded, without resolving any
+correction history first (§10 has the full recipe).
+
 ```
 VOLUME_START|2|Music-002|2026-08-14_1111
 AF|1|4|2026-08-14_1111
@@ -338,8 +345,8 @@ content: even a directory whose entire subtree has since been marked gone
 via `XD` keeps occupying its `(parent_dir_id, dir_name)` pair, since `XD` doesn't
 delete the directory itself (§7 `XD`). Continuing or recovering the *same*
 logical folder therefore reuses its existing `dir_id` rather than minting a
-new one under the same name and parent (see the `Sandra Bernardo` recovery,
-§9 point 6); a genuinely new directory that would otherwise collide with an
+new one under the same name and parent (see §9 for a worked recovery
+example); a genuinely new directory that would otherwise collide with an
 existing name is resolved with `RD` instead (see the `(flac)`/`(mp3)` split,
 §9 point 5).
 
@@ -384,7 +391,7 @@ regardless of which volume declared that directory.
 
 ```
 F|1|2|cover.jpg|125142|P625I35ZX7YR6Y4NILBDDE3MQP
-F|2|2|...01 Baroque Harpsichord and Strings.flac|11124049|55HH6H7GAWRZZVD7FIC7LD5O4X|baroque,epic
+F|2|2|...01 Track One.flac|11124049|55HH6H7GAWRZZVD7FIC7LD5O4X|tag1,tag2
 ```
 
 ### `S` — Symlink
@@ -448,10 +455,10 @@ aliases it.
 S|1|6|cover.jpg|1|1
 ```
 
-(From `Music-003`'s section in `samples/music.bdea` — this aliases
-`F|1|2|cover.jpg` from a second tree position, `dir_id=6`, the mp3
-folder's cover art, instead of archiving those bytes a second time; see
-§9.)
+(From `Music-003`'s section in `samples/music.bdea` — creates an alias with
+its own `file_id=1`, filed under `dir_id=6`, named `cover.jpg`, that reaches
+for the `F` record `file_id=1` on `volume_id=1`; see §9 for the full
+context.)
 
 ### `AF` — Canonical (Active) File
 
@@ -488,10 +495,10 @@ count without needing `XF`.
   actually hold bytes.
 - `date_time?` — optional but recommended (§6 `date_time`): when this
   correction was appended to the index — not a property of either physical
-  copy. When present, matches the enclosing volume's
-  `VOLUME_START`/`VOLUME_END` timestamp; when omitted, that volume
-  timestamp is what a reader falls back to, since a correction's date
-  always coincides with its enclosing volume's date anyway.
+  copy. If present, this **is** that timestamp; if absent, it's taken from
+  the enclosing volume's `VOLUME_START`/`VOLUME_END` timestamp instead,
+  since a correction's date always coincides with its enclosing volume's
+  date anyway.
 
 `AF` does not invalidate, delete, or otherwise remove any other `F` record.
 It only selects one surviving `F` record as the canonical representation of
@@ -507,10 +514,9 @@ directory or file (§4, §10).
 AF|1|4|2026-08-14_1111
 ```
 
-(From `Music-002`'s section in `samples/music.bdea` — of the two now-known
-copies of the same content, `Music-001`'s `F|4|2` and `Music-002`'s own
-`F|6|2`, this names `Music-001`'s original (`volume=1, file=4`) canonical
-going forward; see §9.)
+(From `Music-002`'s section in `samples/music.bdea` — names `volume_id=1,
+file_id=4` canonical for content that also exists as a duplicate elsewhere
+in the library; see §9 for the full context.)
 
 ### `XF` — Delete File
 
@@ -534,18 +540,16 @@ is:
 - `volume_id`, `file_id` — the record being marked gone (§3 `file_key`).
 - `date_time?` — optional but recommended (§6 `date_time`): when this
   correction was appended to the index — not when the medium actually
-  failed or was noticed as bad. When present, matches the enclosing
-  volume's `VOLUME_START`/`VOLUME_END` timestamp; when omitted, that
-  volume timestamp is what a reader falls back to.
+  failed or was noticed as bad. If present, this **is** that timestamp; if
+  absent, it's taken from the enclosing volume's `VOLUME_START`/
+  `VOLUME_END` timestamp instead.
 
 ```
 XF|1|7|2026-08-14_1111
 ```
 
-(From `Music-002`'s section in `samples/music.bdea` — `Music-001`'s
-`F|7|2` (`Vivaldi - Concerto No. 1 in G minor, RV 324.flac`) has become
-unreadable on that disc; nothing else in the library shares its hash, so
-this content is lost unless recovered later; see §9.)
+(From `Music-002`'s section in `samples/music.bdea` — marks `volume_id=1,
+file_id=7` unreadable on that disc; see §9 for the full context.)
 
 ### `XD` — Delete Directory
 
@@ -567,10 +571,9 @@ damaged volume didn't include this branch.
   identify the target — no companion field is needed the way `XF` needs
   `volume_id` alongside `file_id`.
 - `date_time?` — optional but recommended (§6 `date_time`): when this
-  correction was appended to the index. When present, matches the
-  enclosing volume's `VOLUME_START`/`VOLUME_END` timestamp, exactly like
-  `XF`; when omitted, that volume timestamp is what a reader falls back
-  to.
+  correction was appended to the index. If present, this is that
+  timestamp, exactly like `XF`; if absent, it's taken from the enclosing
+  volume's `VOLUME_START`/`VOLUME_END` timestamp instead.
 
 `XD` does not delete the directory itself — `dir_id` remains a permanent
 logical path in the tree (§7 `D`), and its own `D` record (and any
@@ -590,8 +593,7 @@ new `F`/`D` records under it, the `XD` must appear *before* those new
 records in that volume's section: a reader processes the log in order (§4, §10),
 and `XD` wipes whatever is filed under `dir_id` at its own position in the
 log — records placed ahead of it would be wiped by the very `XD` meant to
-close out the old ones (see `Music-004`'s recovery of `Sandra Bernardo`, §9
-point 6).
+close out the old ones (see §9 for a worked recovery example).
 
 Like `XF`, this is a statement about the index's active view, not a claim
 about the medium's material condition — the format doesn't distinguish a
@@ -602,10 +604,9 @@ gone.
 XD|4|2026-08-24_1000
 ```
 
-(From `Music-004`'s section in `samples/music.bdea` — `Music-002`'s
-physical disc turned out to have failed entirely, so `dir_id=4` (Sandra
-Bernardo) and the five `F` records filed under it are dropped from the
-active view at once, instead of writing one `XF` per file; see §9.)
+(From `Music-004`'s section in `samples/music.bdea` — drops `dir_id=4` and
+the five `F` records filed under it from the active view at once, instead
+of writing one `XF` per file; see §9 for the full context.)
 
 ### `RD` — Rename/Relocate Directory
 
@@ -630,10 +631,9 @@ needs correcting individually.
 - `new_dir_name` — the corrected name (§6 `new_dir_name`); repeat the
   existing `dir_name` unchanged if this correction is a pure move.
 - `date_time?` — optional but recommended (§6 `date_time`): when this
-  correction was appended to the index. When present, matches the
-  enclosing volume's `VOLUME_START`/`VOLUME_END` timestamp, exactly like
-  `XF`; when omitted, that volume timestamp is what a reader falls back
-  to.
+  correction was appended to the index. If present, this is that
+  timestamp, exactly like `XF`; if absent, it's taken from the enclosing
+  volume's `VOLUME_START`/`VOLUME_END` timestamp instead.
 
 If more than one `RD` targets the same `dir_id` over time, each `RD`
 updates the directory's current `parent_dir_id`/`dir_name` in turn — a
@@ -644,12 +644,12 @@ last `RD` applied so far, or its original `D` record if none has been
 applied yet (§4, §10).
 
 ```
-RD|2|1|Rafael Krux - The Epic Baroque Album (flac)|2026-08-20_0900
+RD|2|1|Artist One - Album One (flac)|2026-08-20_0900
 ```
 
 (From `Music-003`'s section in `samples/music.bdea` — a new sibling folder,
-`D|6|1|Rafael Krux - The Epic Baroque Album (mp3)`, is about to be
-introduced under `Rafael Krux` (`dir_id=1`) later in this same section, so
+`D|6|1|Artist One - Album One (mp3)`, is about to be
+introduced under `Artist One` (`dir_id=1`) later in this same section, so
 this `RD` renames the existing flac folder, `dir_id=2`, ahead of it to add
 the `(flac)` suffix — parent stays `1`, only `dir_name` changes, since the
 two are about to need distinguishing names. Every `F`/`S` record already filed
@@ -674,10 +674,9 @@ it's called there.
 - `new_file_name` — the corrected name (§6 `new_file_name`); repeat the
   existing `file_name` unchanged if this correction is a pure move.
 - `date_time?` — optional but recommended (§6 `date_time`): when this
-  correction was appended to the index. When present, matches the
-  enclosing volume's `VOLUME_START`/`VOLUME_END` timestamp, exactly like
-  `XF`; when omitted, that volume timestamp is what a reader falls back
-  to.
+  correction was appended to the index. If present, this is that
+  timestamp, exactly like `XF`; if absent, it's taken from the enclosing
+  volume's `VOLUME_START`/`VOLUME_END` timestamp instead.
 
 If more than one `RF` targets the same `(volume_id, file_id)` over time,
 each `RF` updates that record's current `dir_id`/`file_name` in turn — a
@@ -688,13 +687,13 @@ specific* record sits in the tree, whether or not any duplicate of it
 exists.
 
 ```
-RF|1|3|2|Rafael Krux - The Epic Baroque Album - 02 Classical Violin Concerto.flac|2026-08-20_0900
+RF|1|3|2|Artist One - Album One - 02 Track Two.flac|2026-08-20_0900
 ```
 
 (From `Music-003`'s section in `samples/music.bdea` — fixes `Music-001`'s
-naming mistake on `F|3|2`, dropping a stray "label" from `...02 Classical
-Violin Concerto label.flac`; `dir_id` stays `2`, only `file_name` changes. A
-pure naming fix, no duplicate involved; see §9.)
+naming mistake on `F|3|2`, dropping a stray "label" from `...02 Track Two
+label.flac`; `dir_id` stays `2`, only `file_name` changes. A pure naming
+fix, no duplicate involved; see §9.)
 
 `AF`, `XF`, `XD`, `RD`, and `RF` are independent mechanisms — a given
 correction may use any combination of them, but none implies another.
@@ -723,8 +722,8 @@ produced:
 ```
 VOLUME_START|1|Music-001|2026-08-13_1232
 
-D|1|0|Rafael Krux
-D|2|1|Rafael Krux - The Epic Baroque Album
+D|1|0|Artist One
+D|2|1|Artist One - Album One
 ...
 F|1|2|cover.jpg|125142|...
 
@@ -735,7 +734,7 @@ VOLUME_START|2|Music-002|2026-08-14_1111
 AF|1|4|2026-08-14_1111
 XF|1|7|2026-08-14_1111
 
-D|4|0|Sandra Bernardo
+D|4|0|Artist Two
 ...
 F|1|5|...
 
@@ -765,18 +764,17 @@ from the highest-numbered (most recent) volume available.
 Walking through [`samples/music.bdea`](samples/music.bdea), across its four
 volumes:
 
-1. **Music-001** is burned first. It declares `Rafael Krux` (`dir_id=1`)
-   directly under the library root, and under it the album folder
-   `Rafael Krux - The Epic Baroque Album` (`dir_id=2`) plus an unrelated
-   sibling folder, `.info` (`dir_id=3`). `dir_id=2` gets a cover image and
-   five flac tracks (`file_id` 1–6), each flac track's `F` record carrying
-   `baroque,epic` in its trailing `extra` field (§6, §7 `F`) — a concrete
-   illustration of `extra` being free-form; nothing else in the sample
-   interprets these tags, they're just carried along. One of them,
-   `F|3|2|...02 Classical Violin Concerto label.flac`, is filed with a
-   naming mistake — a stray "label" in the name — corrected later in
-   `Music-003` (point 5). One more file in the same folder,
-   `F|7|2|Vivaldi - Concerto No. 1 in G minor, RV 324.flac`, is unrelated
+1. **Music-001** is burned first. It declares `Artist One` (`dir_id=1`)
+   directly under the library root, and under it the album folder `Artist
+   One - Album One` (`dir_id=2`) plus an unrelated sibling folder, `.info`
+   (`dir_id=3`). `dir_id=2` gets a cover image and five flac tracks
+   (`file_id` 1–6), each flac track's `F` record carrying `tag1,tag2` in
+   its trailing `extra` field (§6, §7 `F`) — a concrete illustration of
+   `extra` being free-form; nothing else in the sample interprets these
+   tags, they're just carried along. One of them, `F|3|2|...02 Track Two
+   label.flac`, is filed with a naming mistake — a stray "label" in the
+   name — corrected later in `Music-003` (point 5). One more file in the
+   same folder, `F|7|2|Other Artist - Stray Track.flac`, is unrelated
    content that happens to be filed there too; it's lost in `Music-002`
    (point 3). `dir_id=3` (`.info`) holds one small non-music file,
    `F|8|3|filedata.txt`; that whole folder is dropped in `Music-002` as
@@ -794,14 +792,14 @@ volumes:
    sitting in the index. `last_dir_id` is `3`, the highest `dir_id` this
    volume assigned.
 2. **Music-002** is burned later. It declares the one genuinely new folder
-   tree it needs, `Sandra Bernardo` (`dir_id=4`) and her album `Tropico
-   Ideal (2018)` (`dir_id=5`), and adds that artist's five mp3 tracks there
+   tree it needs, `Artist Two` (`dir_id=4`) and her album `Album Two
+   (2018)` (`dir_id=5`), and adds that artist's five mp3 tracks there
    (`file_id` 1–5). It also re-archives one more file directly under
    `Music-001`'s flac album folder (`dir_id=2`, not re-declared):
-   `F|6|2|...03 Baroque Chamber Strings.flac|11707500|54IGSNGTYY4WWM4FKKQMEOLNGW|baroque,epic`
-   — whose `size`+`hash` are **identical** to `Music-001`'s
-   `F|4|2|...03 Baroque Chamber Strings.flac`. This is the concrete case
-   the format's content-identity model (§3) exists to catch: same content,
+   `F|6|2|...03 Track Three.flac|11707500|54IGSNGTYY4WWM4FKKQMEOLNGW|tag1,tag2`
+   — whose `size`+`hash` are **identical** to `Music-001`'s `F|4|2|...03
+   Track Three.flac`. This is the concrete case the format's
+   content-identity model (§3) exists to catch: same content,
    different volume, no reason the original needed replacing — still
    recognizable as one piece of content via `size`+`hash`. What an
    application chooses to *do* about that (skip re-writing the bytes,
@@ -810,16 +808,16 @@ volumes:
 3. At the start of the `Music-002` section, right after `VOLUME_START`,
    three corrections are recorded together:
    - `AF|1|4|2026-08-14_1111` — of the two now-known copies of the "03
-     Baroque Chamber Strings" content (`Music-001`'s `F|4|2` and
-     `Music-002`'s `F|6|2` from point 2 above, same `size`+`hash`), this
-     declares `Music-001`'s original (`volume=1, file=4`) canonical going
-     forward. `Music-002`'s copy isn't touched or marked `XF` — it remains
-     a valid archived copy, just no longer the presented/canonical one.
+     Track Three" content (`Music-001`'s `F|4|2` and `Music-002`'s `F|6|2`
+     from point 2 above, same `size`+`hash`), this declares `Music-001`'s
+     original (`volume=1, file=4`) canonical going forward. `Music-002`'s
+     copy isn't touched or marked `XF` — it remains a valid archived copy,
+     just no longer the presented/canonical one.
    - `XF|1|7|2026-08-14_1111` — an unrelated correction: it declares that
-     `Music-001`'s file 7 (`Vivaldi - Concerto No. 1 in G minor, RV
-     324.flac`) has become unreadable/lost on that disc. Since nothing
-     else in the library shares its hash, that track is effectively lost
-     from the archive unless recovered and re-added later.
+     `Music-001`'s file 7 (`Other Artist - Stray Track.flac`) has become
+     unreadable/lost on that disc. Since nothing else in the library shares
+     its hash, that track is effectively lost from the archive unless
+     recovered and re-added later.
    - `XD|3|2026-08-14_1111` — also unrelated: it drops `Music-001`'s
      `.info` folder (`dir_id=3`) and its one file (`F|8|3|filedata.txt`)
      from the active view at once.
@@ -846,18 +844,17 @@ volumes:
 5. **Music-003** is burned later still, and adds no new archived content —
    its section is nothing but corrections, a new directory, an alias, and
    three genuinely new (mp3-format) files:
-   - `RD|2|1|Rafael Krux - The Epic Baroque Album (flac)|2026-08-20_0900`
-     (§7 `RD`) renames `dir_id=2` — parent unchanged at `1` — to add the
-     "(flac)" suffix, ahead of the "(mp3)" sibling this same section is
-     about to introduce below, so the two end up with distinguishing names.
-   - `RF|1|3|2|Rafael Krux - The Epic Baroque Album - 02 Classical Violin
-     Concerto.flac|2026-08-20_0900` (§7 `RF`) fixes `Music-001`'s `F|3|2`
-     naming mistake from point 1, dropping the stray "label" word;
-     `dir_id` stays `2`, unchanged — a pure naming fix, no duplicate
-     involved.
-   - `D|6|1|Rafael Krux - The Epic Baroque Album (mp3)` introduces a new
-     sibling folder directly under `Rafael Krux` (`dir_id=1`), alongside
-     the existing flac album folder (`dir_id=2`, just renamed above).
+   - `RD|2|1|Artist One - Album One (flac)|2026-08-20_0900` (§7 `RD`)
+     renames `dir_id=2` — parent unchanged at `1` — to add the "(flac)"
+     suffix, ahead of the "(mp3)" sibling this same section is about to
+     introduce below, so the two end up with distinguishing names.
+   - `RF|1|3|2|Artist One - Album One - 02 Track Two.flac|2026-08-20_0900`
+     (§7 `RF`) fixes `Music-001`'s `F|3|2` naming mistake from point 1,
+     dropping the stray "label" word; `dir_id` stays `2`, unchanged — a
+     pure naming fix, no duplicate involved.
+   - `D|6|1|Artist One - Album One (mp3)` introduces a new sibling folder
+     directly under `Artist One` (`dir_id=1`), alongside the existing flac
+     album folder (`dir_id=2`, just renamed above).
    - `S|1|6|cover.jpg|1|1` aliases `Music-001`'s `F|1|2|cover.jpg` into the
      new mp3 folder instead of archiving those bytes a second time (§7
      `S`).
@@ -882,7 +879,7 @@ volumes:
      It was already excluded from the active view by the `AF` in point 3
      — this doesn't change any count, it just keeps the index honest about
      which physical copies still exist.
-   - `XD|4|2026-08-24_1000` drops the entire `Sandra Bernardo` branch —
+   - `XD|4|2026-08-24_1000` drops the entire `Artist Two` branch —
      `dir_id=4`, `dir_id=5`, and the five `F` records filed under them —
      from the active view in one record, since none of it survives
      anywhere else (§7 `XD`). Both corrections appear *before* this
@@ -893,8 +890,8 @@ volumes:
    - `F|1|5` through `F|5|5` then re-add the same five mp3 tracks — with
      the same `size`+`hash` as `Music-002`'s originals, genuinely the same
      content, recovered from the archivist's still-intact source files —
-     filed under the *same* `dir_id=5` (`Sandra Bernardo - Tropico Ideal
-     (2018)`) `Music-002` originally used, instead of a fresh one: neither
+     filed under the *same* `dir_id=5` (`Artist Two - Album Two (2018)`)
+     `Music-002` originally used, instead of a fresh one: neither
      `dir_id=4` nor `dir_id=5` gets a new `D` record, since their
      `(parent_dir_id, dir_name)` pairs already belong to them permanently (§7
      `D`) — `Music-004` introduces no new directory at all.
@@ -968,6 +965,15 @@ application.
   `date_time`), whichever file's newest `VOLUME_END` carries the higher
   `last_dir_id` (or later `date_time`) is the more complete, more current
   copy.
+- **Quickly verifying an already-written volume.** To confirm a specific
+  volume's physical medium still matches its index entry, a reader doesn't
+  need to resolve the active view at all: re-read that volume's own `F`
+  records, recompute each file's `size`/`hash`, and compare the count and
+  summed size against that volume's `total_vol_files`/`vol_files_size`, and
+  the concatenated, recomputed hashes (in the same order, via
+  `! CONTENT_HASH_ALGORITHM`/`! CONTENT_HASH_ENCODING`) against its
+  `volume_hash` (§7 `VOLUME_END`). A match confirms the medium is intact; a
+  mismatch pinpoints that something on it has changed since it was written.
 - **Resolving the active view.** A reader maintains working state for the
   library — the directory tree, and each file/alias's current
   `dir_id`/`file_name` — and processes the log as a single left-to-right
