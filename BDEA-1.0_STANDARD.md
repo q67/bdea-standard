@@ -548,8 +548,8 @@ XF|1|7|2026-08-14_1111
 ```
 
 (From `Music-002`'s section in `samples/music.bdea` — forcibly excludes
-`volume_id=1, file_id=7`, a track mistakenly archived onto that disc, from
-the library; see §9 for the full context.)
+`volume_id=1, file_id=7`, a track mistakenly archived onto that medium,
+from the library; see §9 for the full context.)
 
 ### `XD` — Delete Directory
 
@@ -775,7 +775,7 @@ volumes:
    name — corrected later in `Music-003` (point 5). One more file in the
    same folder, `F|7|2|Other Artist - Stray Track.flac`, is unrelated
    content that got mistakenly archived there too; it's forcibly excluded
-   from the library in `Music-002` (point 3) — not a case of the disc
+   from the library in `Music-002` (point 3) — not a case of the medium
    itself going bad, but of catching a stray extraneous file after the
    fact. `dir_id=3` (`.info`) holds one small non-music file,
    `F|8|3|filedata.txt`; that file (not the folder itself) is dropped from
@@ -851,9 +851,9 @@ volumes:
    stays active too, since the `AF` choosing between it and `Music-001`'s
    `F|4|2` hasn't been issued yet (point 3) — leaving `12` active records
    — but no field in either `VOLUME_END` states `12` directly.
-5. **Music-003** is burned later still, and adds no new archived content —
-   its section is nothing but corrections, a new directory, an alias, and
-   three genuinely new (mp3-format) files:
+5. **Music-003** is burned later still. Its section combines corrections
+   (`AF`, `RD`, `RF`) with genuinely new content of its own: one new
+   directory, an alias, and three new mp3-format files:
    - `AF|1|4|2026-08-20_0900` — of the two now-known copies of the "03
      Track Three" content (`Music-001`'s `F|4|2` and `Music-002`'s `F|6|2`
      from point 2), this declares `Music-001`'s original (`volume=1,
@@ -887,15 +887,15 @@ volumes:
      own) and `11577606` for their combined size. `last_dir_id` becomes `6`,
      the one new `D` this volume introduced. `volume_hash`
      (`24LRBHF2BOPABRU2MOGBRO3PX4`) is built from only these `3` hashes.
-6. **Music-004** is burned after `Music-002`'s physical disc turns out to
+6. **Music-004** is burned after `Music-002`'s physical medium turns out to
    have failed entirely. Recovering from that means marking whatever lived
-   solely on that disc as gone, then re-archiving the same content fresh
+   solely on that medium as gone, then re-archiving the same content fresh
    under the *same* directories — since a `(parent_dir_id, dir_name)` pair stays
    permanently claimed even once a directory's content is marked gone via
    `XD` (§7 `D`), recovering the same logical folder reuses its existing
    `dir_id` rather than minting new ones:
    - `XF|2|6|2026-08-24_1000` marks `Music-002`'s stray duplicate flac
-     (`volume=2, file=6`) gone too, since that whole disc is unreadable.
+     (`volume=2, file=6`) gone too, since that whole medium is unreadable.
      It was already excluded from the active view by the `AF` in point 5
      — this doesn't change any count, it just keeps the index honest about
      which physical copies still exist.
@@ -925,7 +925,7 @@ volumes:
      `Music-002`'s `volume_hash` *would* have been without its stray
      duplicate flac — not a coincidence or a bug: `volume_hash` depends
      only on the concatenated `hash` values, not on which volume or which
-     physical disc they happen to live on. `last_dir_id` stays `6` —
+     physical medium they happen to live on. `last_dir_id` stays `6` —
      `Music-004` assigns no new `dir_id` at all, since it only reuses
      `Music-002`'s existing ones. A reader resolving the active view after
      this volume lands on the same `14` active files and the same
