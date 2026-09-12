@@ -97,8 +97,10 @@ updated file is written onto that new volume too. This means:
 
 **Record order is significant.** The logical state of a BDEA library is
 resolved by processing records in their order of appearance in the `.bdea`
-file. Within a volume section, each record updates the reader's working
-state immediately, in the order it appears — a correction affects the
+file — this full, ordered sequence of records, spanning every volume
+section, is referred to throughout this document as the log. Within a
+volume section, each record updates the reader's working state
+immediately, in the order it appears — a correction affects the
 state from its position in the log onward, and a later correction to the
 same directory or file simply supersedes an earlier one; records unrelated
 to a given correction are never affected by it. This is also why a
@@ -1030,9 +1032,9 @@ volumes:
 
 These are consequences of the format worth keeping in mind when building
 an application against it. They are advice, not additional format rules —
-nothing here overrides §7's normative record definitions, and an
-implementer is free to use, adapt, or ignore any of it as fits their own
-application.
+nothing here overrides the normative definitions given in the sections
+above, and an implementer is free to use, adapt, or ignore any of it as
+fits their own application.
 
 - **`file_id` is volume-local, `dir_id` is global, names are not
   identity.** Never use `file_id` alone as a cross-volume key; always pair
