@@ -101,7 +101,11 @@ file. Within a volume section, each record updates the reader's working
 state immediately, in the order it appears — a correction affects the
 state from its position in the log onward, and a later correction to the
 same directory or file simply supersedes an earlier one; records unrelated
-to a given correction are never affected by it. A reader never needs to
+to a given correction are never affected by it. This is also why a
+correction and the new data it concerns can be interleaved freely within a
+volume section (§8) instead of being grouped apart from each other — the
+only hard requirement is that a record never references something that
+doesn't already exist earlier in the log. A reader never needs to
 look ahead or rescan to find "the latest" correction — whichever one it
 applied most recently to a given target is, by construction, the current
 one. Across volume sections, a section's updates become part of the
@@ -198,16 +202,18 @@ existing line to be rewritten.
 `VOLUME_START` declares one volume (one physical medium) and opens its
 section; `VOLUME_END` closes it. Every `AF`, `XF`, `XD`, `RD`, `RF`, `D`,
 `F`, and `S` record between a `VOLUME_START` and its matching `VOLUME_END`
-was written as part of producing that volume — corrections first, then new
-data (§8):
+was written as part of producing that volume, in whatever order the
+archivist actually produced them (§8) — corrections are not required to be
+grouped before new data:
 
 - `AF`/`XF`/`RF` records may appear here even though they can reference a
-  file on any *earlier* volume (§7 `AF`, `XF`, `RF`) — their own explicit
-  `volume_id` field is what matters for them, not their position in the
-  file. `XD`/`RD`
-  records likewise may reference a `dir_id` assigned by any earlier volume
-  (§7 `XD`, `RD`) — directories need no `volume_id` at all, since `dir_id`
-  is already global (§3, §10).
+  file on any *earlier* volume, or even a record introduced earlier in
+  this very same section (§7 `AF`, `XF`, `RF`; §9 point 2) — their own
+  explicit `volume_id` field is what matters for them, not their position
+  in the file. `XD`/`RD` records likewise may reference a `dir_id`
+  assigned by any earlier volume, or by this same section (§7 `XD`, `RD`)
+  — directories need no `volume_id` at all, since `dir_id` is already
+  global (§3, §10).
 - `D` records in this range declare any directories newly introduced by
   this volume (§7 `D`) — a directory that already exists in the library
   isn't repeated.
@@ -509,13 +515,41 @@ updates which record is currently canonical for that content — a later
 `AF` supersedes an earlier one, the same way `RD`/`RF` resolve for a
 directory or file (§4, §10).
 
+An `AF`'s target need not come from an earlier volume — it may name a
+record introduced earlier in this very same section canonical, e.g. right
+after the `F` record that just wrote it, when the archivist already knows
+at write time which copy should be preferred (§9 point 2). `AF` is a
+correction like any other: the only requirement is that its target already
+exist earlier in the log (§4, §8), not that it be grouped with other
+corrections or deferred to a later volume.
+
+If the record an `AF` names canonical is later marked `XF` (or falls under
+an `XD`), that `AF` is not automatically inherited by any other surviving
+copy of the same content — the content simply has no canonical record from
+that point on, until a new `AF` names one. Recovering from the loss of a
+canonical copy (e.g. re-archiving the content fresh on a later volume, §9
+point 6) means issuing a fresh `AF` for the new record, exactly like any
+other case of one `AF` superseding an earlier one.
+
 ```
-AF|1|4|2026-08-20_0900
+AF|2|6|2026-08-14_1111
 ```
 
-(From `Music-003`'s section in `samples/music.bdea` — names `volume_id=1,
-file_id=4` canonical for content that also exists as a duplicate elsewhere
-in the library; see §9 for the full context.)
+(From `Music-002`'s section in `samples/music.bdea` — names `volume_id=2,
+file_id=6` canonical immediately after that very record's own `F` line, in
+the same section: the archivist already knows this fresh copy should be
+preferred over `Music-001`'s original, which had turned out to read
+unreliably; see §9 for the full context.)
+
+```
+AF|4|6|2026-08-24_1000
+```
+
+(From `Music-004`'s section in `samples/music.bdea` — `Music-002`'s
+canonical copy was marked `XF` earlier in this same section, since that
+whole medium failed; this `AF`, placed right after the `F` record that
+re-archives the content fresh, names that replacement canonical instead.
+See §9 point 6.)
 
 ### `XF` — Delete File
 
@@ -593,7 +627,10 @@ new `F`/`D` records under it, the `XD` must appear *before* those new
 records in that volume's section: a reader processes the log in order (§4, §10),
 and `XD` wipes whatever is filed under `dir_id` at its own position in the
 log — records placed ahead of it would be wiped by the very `XD` meant to
-close out the old ones (see §9 for a worked recovery example).
+close out the old ones (see §9 for a worked recovery example). This is one
+of only two hard ordering constraints the format imposes on a section's
+records at all (§8) — everything else about how corrections and new data
+interleave is convention, not a requirement.
 
 Like `XF`, this is a statement about the index's active view, not a claim
 about the medium's material condition — the format doesn't distinguish a
@@ -740,14 +777,37 @@ F|1|5|...
 VOLUME_END|2|Music-002|2026-08-14_1111|6|41474037|BV6N47NFZD6XHIFB2EH2HR625I|5
 ```
 
-Each new volume appends: one `VOLUME_START` line, optionally `AF`/`XF`/`XD`/
-`RD`/`RF` corrections (which may reference files or directories from
-*earlier* volumes, not just the new one — placed first in the section, since
-a correction must precede any new record it would otherwise wipe, §7 `XD`),
-`D` records for any directories that volume newly introduces (directories
-that already exist are not repeated), that volume's `F` records, optionally
-`S` aliases to content already archived, and closes with a matching
-`VOLUME_END` line.
+Each new volume appends: one `VOLUME_START` line; then, in whatever order
+the archivist actually produced them, any `AF`/`XF`/`XD`/`RD`/`RF`
+corrections (which may reference files or directories from an earlier
+volume, or from earlier in this very same section) together with any new
+`D` records for directories this volume introduces (directories that
+already exist are not repeated), `F` records, and `S` aliases to content
+already archived; and closes with a matching `VOLUME_END` line.
+
+A section's records are processed strictly in the order they appear (§4)
+— there is no requirement to group every correction ahead of every
+new-data record. In practice corrections usually do come first, since most
+mistakes concern content from an already-closed earlier volume, discovered
+only after this volume's own new content is already decided (most of §9's
+volumes follow that pattern). But nothing stops a correction from
+following the very record it concerns, in the same section instead — e.g.
+naming a freshly-written duplicate canonical with an `AF` right after its
+own `F` record, rather than waiting for a later volume (§9 point 2; §7
+`AF`).
+
+The format places exactly two hard constraints on this ordering, both
+already implied by records being processed strictly in order (§4):
+
+- A record can only reference something that already exists earlier in
+  the log — from an earlier volume, or from earlier in this same section.
+  A correction can't name a target that hasn't been written yet.
+- `XD` (and, one file at a time, `XF`) removes whatever is filed under its
+  target *as of its own position* in the log (§7 `XD`). If the same
+  volume both retires content this way and re-files new content under the
+  same `dir_id`, the correction must come *before* that new content —
+  otherwise the very correction meant to clear the old content would wipe
+  the new content out too.
 
 **Important consequence of write-once media:** because a volume, once
 physically written, can't be rewritten, its embedded copy of the index is
@@ -770,7 +830,13 @@ volumes:
    (`file_id` 1–6), each flac track's `F` record carrying `tag1,tag2` in
    its trailing `extra` field (§6, §7 `F`) — a concrete illustration of
    `extra` being free-form; nothing else in the sample interprets these
-   tags, they're just carried along. One of them, `F|3|2|...02 Track Two
+   tags, they're just carried along. One of them, `F|4|2|...03 Track
+   Three.flac`, turns out — once this volume is actually read back — to be
+   unreliable: it comes back correctly only some of the time, not
+   consistently unreadable, just not trustworthy. That's what prompts a
+   fresh safety copy of the same content on the very next volume, one
+   already known at write time to deserve becoming canonical (`Music-002`,
+   point 2). Another of them, `F|3|2|...02 Track Two
    label.flac`, is filed with a naming mistake — a stray "label" in the
    name — corrected later in `Music-003` (point 5). One more file in the
    same folder, `F|7|2|Other Artist - Stray Track.flac`, is unrelated
@@ -795,19 +861,25 @@ volumes:
 2. **Music-002** is burned later. It declares the one genuinely new folder
    tree it needs, `Artist Two` (`dir_id=4`) and her album `Album Two
    (2018)` (`dir_id=5`), and adds that artist's five mp3 tracks there
-   (`file_id` 1–5). It also re-archives one more file directly under
-   `Music-001`'s flac album folder (`dir_id=2`, not re-declared):
+   (`file_id` 1–5). It also re-archives, as a safety copy, the "03 Track
+   Three" content whose original (`Music-001`'s `F|4|2`) had turned out
+   unreliable (point 1):
    `F|6|2|...03 Track Three.flac|11707500|54IGSNGTYY4WWM4FKKQMEOLNGW|tag1,tag2`
-   — whose `size`+`hash` are **identical** to `Music-001`'s `F|4|2|...03
-   Track Three.flac`. This is the concrete case the format's
-   content-identity model (§3) exists to catch: same content,
-   different volume, no reason the original needed replacing — still
-   recognizable as one piece of content via `size`+`hash`. What an
-   application chooses to *do* about that (skip re-writing the bytes,
-   write them anyway for redundancy, warn the user, etc.) is
-   implementation policy — see §10.
+   — `size`+`hash` **identical** to `Music-001`'s `F|4|2`, the same
+   content-identity match the format's model (§3) exists to catch. But
+   here the archivist already knows, at the moment this line is written,
+   *why* the copy was made and which one should be preferred going
+   forward — so the very next line in this same section is
+   `AF|2|6|2026-08-14_1111`, naming this fresh copy canonical immediately,
+   instead of waiting for a later volume the way a correction normally
+   would (§7 `AF`; §8). `Music-001`'s original isn't touched or marked
+   `XF` — it remains a valid, readable archived copy, just no longer the
+   presented/canonical one.
 3. At the start of the `Music-002` section, right after `VOLUME_START`,
-   two unrelated corrections are recorded together:
+   two unrelated corrections are recorded together, ahead of any new data
+   — the conventional placement, since both concern mistakes already
+   found in `Music-001`'s closed-out history, unrelated to whatever this
+   volume is about to add:
    - `XF|1|7|2026-08-14_1111` — declares that `Music-001`'s file 7
      (`Other Artist - Stray Track.flac`) is forcibly excluded from the
      library. This isn't the case of pulling a volume back out and finding
@@ -823,47 +895,40 @@ volumes:
      valid logical path (§7 `XD`) — it's just empty of active content until
      something new is filed under it.
 
-   Naming a canonical copy between `Music-001`'s `F|4|2` and this same
-   section's own `F|6|2` (point 2) does *not* happen here: corrections are
-   placed before a section's new `D`/`F`/`S` records (§8), so at this point
-   in the log `Music-002`'s own duplicate hasn't been written yet — an `AF`
-   issued this early would have to name a winner between a record that
-   already exists and one that doesn't yet. That correction waits until
-   `Music-003` (point 5), once both copies genuinely exist in the archived
-   history.
+   The section's *third* correction, `AF|2|6|2026-08-14_1111` (point 2),
+   breaks that front-loaded convention on purpose: it comes near the
+   *end* of the section, right after the `F|6|2` record it names
+   canonical, because its target simply didn't exist yet at the start of
+   the section — an `AF` can only reference a record already earlier in
+   the log (§4, §8), and here that record is this same section's own
+   duplicate, not anything from an earlier volume. Nothing requires
+   `AF`/`XF`/`XD`/`RD`/`RF` to cluster together at one spot in a section;
+   each simply has to follow whatever it targets (§8).
 4. Closing `Music-002`'s section,
    `VOLUME_END|2|Music-002|2026-08-14_1111|6|41474037|BV6N47NFZD6XHIFB2EH2HR625I|5`
    reports `6` for `total_vol_files` and `41474037` for `vol_files_size` —
    this volume's own `6` `F` records (the `5` new mp3 tracks plus the
-   stray duplicate flac from point 2) and their combined `size`, counted
+   safety-copy flac from point 2) and their combined `size`, counted
    exactly as physically written — `total_vol_files`/`vol_files_size` are
-   per-volume physical facts, not the library's resolved active view.
-   `volume_hash`, `BV6N47NFZD6XHIFB2EH2HR625I`, is built the same way as
-   `Music-001`'s but from only this volume's `6` `F` hashes — it does not
-   extend or combine with `Music-001`'s `volume_hash`, since `volume_hash`
-   is always scoped to one volume, never a whole-library value.
-   `last_dir_id` becomes `5`, the highest `dir_id` either volume has
-   assigned so far. A reader wanting the library's *active* file
-   count/size at this point resolves the full log instead (§10): of the
-   `14` `F` records written so far (`8` from `Music-001` plus `6` from
-   `Music-002`), only `Music-001`'s `F|7|2` (`XF`'d) and `Music-001`'s
-   `F|8|3` (`XD`'d) are inactive so far — `Music-002`'s `F|6|2` duplicate
-   stays active too, since the `AF` choosing between it and `Music-001`'s
-   `F|4|2` hasn't been issued yet (point 3) — leaving `12` active records
-   — but no field in either `VOLUME_END` states `12` directly.
+   per-volume physical facts, not the library's resolved active view, and
+   `AF` never adds to either count (§7 `VOLUME_END`). `volume_hash`,
+   `BV6N47NFZD6XHIFB2EH2HR625I`, is built the same way as `Music-001`'s
+   but from only this volume's `6` `F` hashes — it does not extend or
+   combine with `Music-001`'s `volume_hash`, since `volume_hash` is always
+   scoped to one volume, never a whole-library value. `last_dir_id`
+   becomes `5`, the highest `dir_id` either volume has assigned so far. A
+   reader wanting the library's *active* file count/size at this point
+   resolves the full log instead (§10): of the `14` `F` records written so
+   far (`8` from `Music-001` plus `6` from `Music-002`), `Music-001`'s
+   `F|7|2` (`XF`'d) and `Music-001`'s `F|8|3` (`XD`'d) are inactive, and
+   `Music-001`'s `F|4|2`/`Music-002`'s `F|6|2` — same content — already
+   collapse into a single active record now that this section's own `AF`
+   has run (point 2), leaving `11` active records — but no field in
+   either `VOLUME_END` states `11` directly.
 5. **Music-003** is burned later still. Its section combines corrections
-   (`AF`, `RD`, `RF`) with genuinely new content of its own: one new
-   directory, an alias, and three new mp3-format files:
-   - `AF|1|4|2026-08-20_0900` — of the two now-known copies of the "03
-     Track Three" content (`Music-001`'s `F|4|2` and `Music-002`'s `F|6|2`
-     from point 2), this declares `Music-001`'s original (`volume=1,
-     file=4`) canonical going forward. `Music-002`'s copy isn't touched or
-     marked `XF` — it remains a valid archived copy, just no longer the
-     presented/canonical one. This is recorded here, in `Music-003`, rather
-     than back in `Music-002` where the duplicate was created (point 3):
-     by now both copies are already closed-out history, so the correction
-     genuinely follows both records it names instead of preceding one of
-     them.
+   (`RD`, `RF`) with genuinely new content of its own: one new directory,
+   an alias, and three new mp3-format files — no `AF` here, since that
+   correction already ran back in `Music-002` (point 2):
    - `RD|2|1|Artist One - Album One (flac)|2026-08-20_0900` (§7 `RD`)
      renames `dir_id=2` — parent unchanged at `1` — to add the "(flac)"
      suffix, ahead of the "(mp3)" sibling this same section is about to
@@ -883,56 +948,83 @@ volumes:
      counterparts despite sharing a piece of content conceptually.
    - Closing this volume,
      `VOLUME_END|3|Music-003|2026-08-20_0900|3|11577606|24LRBHF2BOPABRU2MOGBRO3PX4|6`
-     reports `3` new `F` records (`AF`/`RD`/`RF`/`S` add no `F` of their
-     own) and `11577606` for their combined size. `last_dir_id` becomes `6`,
+     reports `3` new `F` records (`RD`/`RF`/`S` add no `F` of their own)
+     and `11577606` for their combined size. `last_dir_id` becomes `6`,
      the one new `D` this volume introduced. `volume_hash`
      (`24LRBHF2BOPABRU2MOGBRO3PX4`) is built from only these `3` hashes.
 6. **Music-004** is burned after `Music-002`'s physical medium turns out to
    have failed entirely. Recovering from that means marking whatever lived
    solely on that medium as gone, then re-archiving the same content fresh
-   under the *same* directories — since a `(parent_dir_id, dir_name)` pair stays
-   permanently claimed even once a directory's content is marked gone via
-   `XD` (§7 `D`), recovering the same logical folder reuses its existing
-   `dir_id` rather than minting new ones:
-   - `XF|2|6|2026-08-24_1000` marks `Music-002`'s stray duplicate flac
-     (`volume=2, file=6`) gone too, since that whole medium is unreadable.
-     It was already excluded from the active view by the `AF` in point 5
-     — this doesn't change any count, it just keeps the index honest about
-     which physical copies still exist.
+   — under the *same* directories, since a `(parent_dir_id, dir_name)` pair
+   stays permanently claimed even once a directory's content is marked
+   gone via `XD` (§7 `D`), so recovering a logical folder reuses its
+   existing `dir_id` rather than minting a new one:
+   - `XF|2|6|2026-08-24_1000` marks `Music-002`'s "03 Track Three" safety
+     copy (`volume=2, file=6`) gone, since that whole medium is
+     unreadable. Unlike a duplicate that was never canonical, this one
+     matters: it's the very record `Music-002`'s own `AF` (point 2) named
+     canonical, so this `XF` leaves that content with *no* canonical
+     record at all until a fresh `AF` names one below (§7 `AF`) —
+     `Music-001`'s original still exists and is still active, but nothing
+     currently says it's preferred, and it's the one copy already known
+     to read unreliably (point 1).
    - `XD|4|2026-08-24_1000` drops the five `F` records filed anywhere under
      the `Artist Two` branch (`dir_id=4` and its child `dir_id=5`) from the
      active view in one record, since none of that content survives
      anywhere else (§7 `XD`) — `dir_id=4`/`dir_id=5` themselves aren't
      removed, just left empty of active content. Both corrections appear
-     *before* this volume's new `F` records below: an `XD` only wipes
-     what's filed under its `dir_id` as of its own position in the log
-     (§7 `XD`), so the recovered files need to come *after* it, not
-     before, or this same `XD` would wipe them out too.
-   - `F|1|5` through `F|5|5` then re-add the same five mp3 tracks — with
-     the same `size`+`hash` as `Music-002`'s originals, genuinely the same
+     *before* this volume's new `F` records below — not because
+     corrections must always come first (point 2 already shows otherwise),
+     but because `XD` specifically only wipes what's filed under its
+     `dir_id` as of its own position in the log (§7 `XD`), so the
+     recovered files need to come *after* it, not before, or this same
+     `XD` would wipe them out too. `XF` carries no such forward-wipe
+     effect, so `XF|2|6` could in principle sit anywhere in this section —
+     it's placed first here simply because that's the order the recovery
+     actually happened in.
+   - `F|1|5` through `F|5|5` re-add the same five mp3 tracks — with the
+     same `size`+`hash` as `Music-002`'s originals, genuinely the same
      content, recovered from the archivist's still-intact source files —
      filed under the *same* `dir_id=5` (`Artist Two - Album Two (2018)`)
-     `Music-002` originally used, instead of a fresh one: neither
-     `dir_id=4` nor `dir_id=5` gets a new `D` record, since their
-     `(parent_dir_id, dir_name)` pairs already belong to them permanently (§7
-     `D`) — `Music-004` introduces no new directory at all.
+     `Music-002` originally used.
+   - `F|6|2|...03 Track Three.flac|11707500|54IGSNGTYY4WWM4FKKQMEOLNGW|tag1,tag2`
+     re-archives the "03 Track Three" content once more — the same
+     `size`+`hash` as both `Music-001`'s `F|4|2` and the now-dead
+     `Music-002` `F|6|2` — filed under the same `dir_id=2`. None of
+     `dir_id=4`, `dir_id=5`, or `dir_id=2` gets a new `D` record: all
+     three `(parent_dir_id, dir_name)` pairs already belong to them
+     permanently (§7 `D`) — `Music-004` introduces no new directory at
+     all.
+   - `AF|4|6|2026-08-24_1000` immediately names this fresh copy canonical
+     — the same pattern as `Music-002`'s own `AF` (point 2), following its
+     own section's `F` record rather than waiting for a later volume.
+     This is what actually restores the content's canonical status after
+     `XF|2|6` took it away above; without this line, the "03 Track Three"
+     content would be left with no canonical record at all, even though
+     three archived copies of it now exist across three different
+     volumes.
    - Closing this volume,
-     `VOLUME_END|4|Music-004|2026-08-24_1000|5|29766537|UEC7KTOKTAJNO643LVUXSCXCFA|6`
-     reports this volume's own `5` `F` records and their `29766537`
-     combined size — identical to what `Music-002`'s five mp3 tracks
-     summed to, since it's the same content. Its `volume_hash`,
-     `UEC7KTOKTAJNO643LVUXSCXCFA`, comes out identical to what
-     `Music-002`'s `volume_hash` *would* have been without its stray
-     duplicate flac — not a coincidence or a bug: `volume_hash` depends
-     only on the concatenated `hash` values, not on which volume or which
-     physical medium they happen to live on. `last_dir_id` stays `6` —
+     `VOLUME_END|4|Music-004|2026-08-24_1000|6|41474037|BV6N47NFZD6XHIFB2EH2HR625I|6`
+     reports `6` `F` records this volume physically wrote (the `5`
+     recovered mp3 tracks plus the recovered flac) and `41474037` for
+     their combined size — identical to `Music-002`'s own
+     `total_vol_files`/`vol_files_size`, since `Music-004` recovers
+     exactly the same six pieces of content `Music-002` originally wrote,
+     in the same order. Its `volume_hash`, `BV6N47NFZD6XHIFB2EH2HR625I`,
+     comes out **identical** to `Music-002`'s own `volume_hash` for the
+     same reason — not a coincidence or a bug: `volume_hash` is a pure
+     function of the concatenated `hash` values in order (§7
+     `VOLUME_END`), and both volumes here concatenate the exact same six
+     hashes in the exact same order. `last_dir_id` stays `6` —
      `Music-004` assigns no new `dir_id` at all, since it only reuses
-     `Music-002`'s existing ones. A reader resolving the active view after
-     this volume lands on the same `14` active files and the same
-     `100244460` total byte size as after `Music-003` — `Music-002`'s
-     failure and `Music-004`'s recovery of it cancel out exactly, which is
-     the whole point of a correct recovery, even though neither
-     `VOLUME_END` states that total directly (§10).
+     existing ones. A reader resolving the active view after this volume
+     lands on the same `14` active files and the same `100244460` total
+     byte size as after `Music-003` (§10): the "03 Track Three" content
+     has changed which physical copy is canonical twice now —
+     `Music-001`'s original, then `Music-002`'s safety copy, then this
+     volume's fresh recovery — but at every point it still resolves to
+     exactly one active record, so none of that churn moves the library's
+     overall totals.
 
 ## 10. Notes for implementers
 
