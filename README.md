@@ -20,14 +20,19 @@ behavior. Anyone may write software that reads or writes `.bdea` files
 under this specification, for any purpose, including commercial use, without
 asking permission.
 
-- **Specification:** [`BDEA-2.0_STANDARD.md`](BDEA-2.0_STANDARD.md) (English,
-  authoritative)
-- **Worked example:** [`samples/music.bdea`](samples/music.bdea)
-- **Previous versions:** [`old_versions/`](old_versions/) — e.g.
-  [`old_versions/1.0/`](old_versions/1.0/) holds the 1.0 specification and
-  its example, kept for reading existing 1.0 files (see
-  [`CHANGELOG.md`](CHANGELOG.md))
-- **License:** [CC BY 4.0](LICENSE)
+> **Current version: 2.0** —
+> [specification](versions/2.0/BDEA-2.0_STANDARD.md) ·
+> [worked example](versions/2.0/samples/music.bdea)
+
+| Version | Status | Specification | Example |
+|---------|--------|---------------|---------|
+| **2.0** | **Current** — use for new files | [`BDEA-2.0_STANDARD.md`](versions/2.0/BDEA-2.0_STANDARD.md) | [`music.bdea`](versions/2.0/samples/music.bdea) |
+| 1.0 | Superseded — still valid for reading existing 1.0 files | [`BDEA-1.0_STANDARD.md`](versions/1.0/BDEA-1.0_STANDARD.md) | [`music.bdea`](versions/1.0/samples/music.bdea) |
+
+Each version lives at a fixed path under [`versions/`](versions/), so links
+to a given version never change when a newer one is released. What changed
+between versions is in [`CHANGELOG.md`](CHANGELOG.md). Specifications are in
+English and authoritative. Licensed under [CC BY 4.0](LICENSE).
 
 ## Why
 
@@ -70,8 +75,8 @@ F|2|2|...01 Track One.flac|11124049|ef4e7f1fe605a39cd47f2a05f58faee5|tag1,tag2
 VOLUME_END|1|Music-001|2026-08-13_1232|8|82235912|d83d681ff83f05ceb2348792b9300a01|3
 ```
 
-See [`BDEA-2.0_STANDARD.md`](BDEA-2.0_STANDARD.md) for the full grammar, and
-[`samples/music.bdea`](samples/music.bdea) for a complete worked example
+See [`BDEA-2.0_STANDARD.md`](versions/2.0/BDEA-2.0_STANDARD.md) for the full grammar, and
+[`versions/2.0/samples/music.bdea`](versions/2.0/samples/music.bdea) for a complete worked example
 (four volumes, duplicate content, an alias, renames, and recovery from a
 failed volume).
 
@@ -108,11 +113,11 @@ source.
 
 **Is there a reference implementation?**
 Not yet. The spec is deliberately implementation-agnostic; see
-[`BDEA-2.0_STANDARD.md` §10](BDEA-2.0_STANDARD.md#10-notes-for-implementers)
+[`BDEA-2.0_STANDARD.md` §10](versions/2.0/BDEA-2.0_STANDARD.md#10-notes-for-implementers)
 for notes aimed at anyone building one.
 
 ## License
 
-The specification text (`BDEA-2.0_STANDARD.md`, everything under `old_versions/`, and this README) is licensed
+The specification text (everything under `versions/`, and this README) is licensed
 under [CC BY 4.0](LICENSE) — share and adapt freely,
 including commercially, with attribution.

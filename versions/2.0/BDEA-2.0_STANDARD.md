@@ -6,13 +6,10 @@ systems such as LTO, and similar). This document specifies the `.bdea` index
 file format. It does not
 specify any particular application's behavior (see [§10](#10-notes-for-implementers)).
 
-> **Superseded.** This document describes `! VERSION 1.0` and is kept only
-> for reading existing 1.0 files. New `.bdea` files should follow
-> [`BDEA-2.0_STANDARD.md`](../../BDEA-2.0_STANDARD.md); see
-> [`CHANGELOG.md`](../../CHANGELOG.md) for what changed.
-
-This is the authoritative specification for `! VERSION 1.0`. See
+This is the authoritative specification for `! VERSION 2.0`. See
 [`samples/music.bdea`](samples/music.bdea) for a canonical worked example.
+Files declaring `! VERSION 1.0` are described by
+[`versions/1.0/BDEA-1.0_STANDARD.md`](../1.0/BDEA-1.0_STANDARD.md) instead (§11).
 
 ## 1. Purpose and scope
 
@@ -129,17 +126,41 @@ These appear once, near the top of the file, before any volume section.
 | `! TEXT_ENCODING` | `utf-8` | Encoding of the `.bdea` file itself. |
 | `! TEXT_NORMALIZATION` | `NFC` | Unicode normalization form used for the file's text. |
 | `! ARCHIVE_TYPE` | `BDEA` | Format identifier. |
-| `! VERSION` | `1.0` | Format version (see §11). |
+| `! VERSION` | `2.0` | Format version (see §11). |
 | `! LIBRARY` | `Music` | Name of this library. |
 | `! NAME_ENCODING` | `utf-8` | Encoding used for `dir_name`/`file_name` fields. |
 | `! NAME_NORMALIZATION` | `NFC` | Unicode normalization applied to names. |
 | `! NAME_FORBIDDEN_CHARACTERS` | `/ \ : * ? " < > \|` | Characters names must not contain (superset of Windows/exFAT-reserved characters — a safe choice for media meant to be readable from any filesystem). |
 | `! CONTENT_HASH_ALGORITHM` | `md5` | Hash algorithm used to identify file content. |
-| `! CONTENT_HASH_ENCODING` | `base32` | Encoding used to render the hash as text. |
+| `! CONTENT_HASH_ENCODING` | `hex` | Encoding used to render the hash as text: lowercase hexadecimal (see below). |
 | `! CONTENT_HASH_SCOPE` | `file-content` | What is hashed (the raw file bytes, as opposed to e.g. name+content). |
 
 This is the canonical, current form of the header, and what new `.bdea`
 files should emit.
+
+**Content hash encoding.** `hex` means each byte of the digest is written
+as two hexadecimal digits, most significant first, using only the
+characters `0-9a-f` — lowercase, no separators, no prefix, no padding. An
+MD5 digest therefore always renders as exactly 32 characters, e.g.
+`7fb5d46fb9bff11f638d42c231936c83`. This is deliberately the same form the
+stock tools of every common operating system already print, so a file's
+recorded `hash` can be checked against the archived bytes years later with
+nothing but what ships with the OS:
+
+| OS | Command | Output |
+|---|---|---|
+| Linux | `md5sum FILE` | lowercase hex |
+| macOS | `md5 -q FILE` | lowercase hex |
+| Windows | `certutil -hashfile FILE MD5` | hex |
+| Windows | `Get-FileHash -Algorithm MD5 FILE` (PowerShell) | UPPERCASE hex |
+
+A producing application MUST write `hash`/`volume_hash` values in
+lowercase. A reader comparing a recorded value against an external tool's
+output SHOULD compare case-insensitively, since some tools (e.g.
+PowerShell's `Get-FileHash`) print uppercase; inside the index itself the
+lowercase form is the only valid one, because `volume_hash` is computed
+over the recorded text (§7 `VOLUME_END`) and would come out different for
+the same digest written in another case.
 
 ## 6. Type system (`! TYPE`)
 
@@ -160,7 +181,7 @@ self-describing and independently parseable.
 | `file_name` | `string max=120` | File name; also used by `S` aliases, which occupy a file-tree position of their own (§7 `S`). |
 | `new_dir_name` | `string max=120` | Same kind as `dir_name`; the corrected name an `RD` correction gives a directory (§7 `RD`). |
 | `new_file_name` | `string max=120` | Same kind as `file_name`; the corrected name an `RF` correction gives a file or alias (§7 `RF`). |
-| `hash` | `string max=32` | Encoded content hash (26 chars for base32 MD5; the extra headroom allows for a longer hash if `CONTENT_HASH_ALGORITHM` ever changes). |
+| `hash` | `string max=32` | Encoded content hash: exactly 32 lowercase hex characters for MD5 (§5 "Content hash encoding"). |
 | `extra` | `string max=256` | Free-form field on `D`/`F` records (§7 `D`, §7 `F`), e.g. tags. Left empty by any application that has no use for it. |
 | `volume_id` | `uint32` | Unique within the library, assigned monotonically increasing, and never reused. |
 | `target_volume_id` | `uint32` | Same kind as `volume_id`; the volume of the `F` record an `S` alias reaches for (§7 `S`). |
@@ -189,7 +210,7 @@ volume section, directory, file, or alias.
 
 A field name ending in `?` in a `! RECORD` declaration marks it **optional
 and trailing**: a data line using that tag may omit it, having one fewer
-pipe-delimited field than declared. As of `! VERSION 1.0` this applies to
+pipe-delimited field than declared. As of `! VERSION 2.0` this applies to
 `extra?` on `D` and `F` (below), and to `date_time?` on `AF`/`XF`/`XD`/`RD`/`RF`
 (below) — every other field is mandatory. A conforming parser must accept a
 line with or without its optional trailing field, treating a missing one as
@@ -283,12 +304,16 @@ enough to keep without resolving any correction (§10):
   length (§6 `hash`) for as long as `! CONTENT_HASH_ALGORITHM`/
   `! CONTENT_HASH_ENCODING` stay unchanged, which makes plain
   concatenation unambiguous — then applying `! CONTENT_HASH_ALGORITHM` to
-  the resulting bytes and encoding the result with
-  `! CONTENT_HASH_ENCODING` (§5) — the same two header declarations
-  already used for every per-file hash, just applied over a different
-  input. `S` records contribute nothing, since they carry no
+  the resulting text, taken as its ASCII bytes (i.e. the lowercase hex
+  characters themselves, not the digest bytes they encode), and encoding
+  the result with `! CONTENT_HASH_ENCODING` (§5) — the same two header
+  declarations already used for every per-file hash, just applied over a
+  different input. `S` records contribute nothing, since they carry no
   `hash` of their own (§7 `S`); a volume that happens to add no `F` records
-  at all uses the hash of an empty input.
+  at all uses the hash of an empty input (`d41d8cd98f00b204e9800998ecf8427e`
+  for MD5). Because the input is plain text, this too can be reproduced
+  with stock OS tools, e.g. `printf '%s' HASH1 HASH2 ... | md5sum` on
+  Linux or `printf '%s' HASH1 HASH2 ... | md5` on macOS.
 - `last_dir_id` — highest `dir_id` assigned in the library as of this
   volume; a simple monotonic maximum, unaffected by
   `AF`/`XF`/`XD`/`RD`/`RF` (§7 `D`) — the one whole-library value
@@ -296,7 +321,7 @@ enough to keep without resolving any correction (§10):
   to know it.
 
 `total_vol_files`/`vol_files_size` are the only per-volume tallies
-`! VERSION 1.0` keeps — `S` additions, and every correction (`AF`, `XF`,
+`! VERSION 2.0` keeps — `S` additions, and every correction (`AF`, `XF`,
 `XD`, `RD`, `RF`), have no dedicated counter of their own. Neither field
 says anything about the library's *active* file count or byte size once
 later corrections are taken into account (§10) — a reader wanting that
@@ -315,7 +340,7 @@ correction history first (§10 has the full recipe).
 VOLUME_START|2|Music-002|2026-08-14_1111
 XF|1|7|2026-08-14_1111
 ...
-VOLUME_END|2|Music-002|2026-08-14_1111|6|41474037|BV6N47NFZD6XHIFB2EH2HR625I|5
+VOLUME_END|2|Music-002|2026-08-14_1111|6|41474037|3205bef3b9444985cee61145b49a55df|5
 ```
 
 ### `D` — Directory
@@ -402,8 +427,8 @@ regardless of which volume declared that directory.
   tags. Empty or omitted unless an application populates it.
 
 ```
-F|1|2|cover.jpg|125142|P625I35ZX7YR6Y4NILBDDE3MQP
-F|2|2|...01 Track One.flac|11124049|55HH6H7GAWRZZVD7FIC7LD5O4X|tag1,tag2
+F|1|2|cover.jpg|125142|7fb5d46fb9bff11f638d42c231936c83
+F|2|2|...01 Track One.flac|11124049|ef4e7f1fe605a39cd47f2a05f58faee5|tag1,tag2
 ```
 
 ### `S` — Symlink
@@ -771,7 +796,7 @@ D|2|1|Artist One - Album One
 ...
 F|1|2|cover.jpg|125142|...
 
-VOLUME_END|1|Music-001|2026-08-13_1232|8|82235912|QE4TTLSX56ECJLO3JQMQW74ECQ|3
+VOLUME_END|1|Music-001|2026-08-13_1232|8|82235912|d83d681ff83f05ceb2348792b9300a01|3
 
 VOLUME_START|2|Music-002|2026-08-14_1111
 
@@ -781,7 +806,7 @@ D|4|0|Artist Two
 ...
 F|1|5|...
 
-VOLUME_END|2|Music-002|2026-08-14_1111|6|41474037|BV6N47NFZD6XHIFB2EH2HR625I|5
+VOLUME_END|2|Music-002|2026-08-14_1111|6|41474037|3205bef3b9444985cee61145b49a55df|5
 ```
 
 Each new volume appends: one `VOLUME_START` line; then, in whatever order
@@ -853,11 +878,11 @@ volumes:
    fact. `dir_id=3` (`.info`) holds one small non-music file,
    `F|8|3|filedata.txt`; that file (not the folder itself) is dropped from
    the active view in `Music-002` as well. Closing this volume's section,
-   `VOLUME_END|1|Music-001|2026-08-13_1232|8|82235912|QE4TTLSX56ECJLO3JQMQW74ECQ|3`
+   `VOLUME_END|1|Music-001|2026-08-13_1232|8|82235912|d83d681ff83f05ceb2348792b9300a01|3`
    reports `8` (`total_vol_files`) and `82235912` (`vol_files_size`) — this
    volume's own `F` count and combined byte size, simple sums over the `8`
    `F` records just written, since no correction has touched anything yet.
-   Its `volume_hash`, `QE4TTLSX56ECJLO3JQMQW74ECQ`, concatenates those same
+   Its `volume_hash`, `d83d681ff83f05ceb2348792b9300a01`, concatenates those same
    `8` records' own `hash` values, in the order they appear (no separator
    needed, since they're all the same fixed length), then hashes and
    encodes that text the same way `CONTENT_HASH_ALGORITHM`/
@@ -871,7 +896,7 @@ volumes:
    (`file_id` 1–5). It also re-archives, as a safety copy, the "03 Track
    Three" content whose original (`Music-001`'s `F|4|2`) had turned out
    unreliable (point 1):
-   `F|6|2|...03 Track Three.flac|11707500|54IGSNGTYY4WWM4FKKQMEOLNGW|tag1,tag2`
+   `F|6|2|...03 Track Three.flac|11707500|ef106934d3c6396b338552a0c2396d35|tag1,tag2`
    — `size`+`hash` **identical** to `Music-001`'s `F|4|2`, the same
    content-identity match the format's model (§3) exists to catch. But
    here the archivist already knows, at the moment this line is written,
@@ -912,14 +937,14 @@ volumes:
    `AF`/`XF`/`XD`/`RD`/`RF` to cluster together at one spot in a section;
    each simply has to follow whatever it targets (§8).
 4. Closing `Music-002`'s section,
-   `VOLUME_END|2|Music-002|2026-08-14_1111|6|41474037|BV6N47NFZD6XHIFB2EH2HR625I|5`
+   `VOLUME_END|2|Music-002|2026-08-14_1111|6|41474037|3205bef3b9444985cee61145b49a55df|5`
    reports `6` for `total_vol_files` and `41474037` for `vol_files_size` —
    this volume's own `6` `F` records (the `5` new mp3 tracks plus the
    safety-copy flac from point 2) and their combined `size`, counted
    exactly as physically written — `total_vol_files`/`vol_files_size` are
    per-volume physical facts, not the library's resolved active view, and
    `AF` never adds to either count (§7 `VOLUME_END`). `volume_hash`,
-   `BV6N47NFZD6XHIFB2EH2HR625I`, is built the same way as `Music-001`'s
+   `3205bef3b9444985cee61145b49a55df`, is built the same way as `Music-001`'s
    but from only this volume's `6` `F` hashes — it does not extend or
    combine with `Music-001`'s `volume_hash`, since `volume_hash` is always
    scoped to one volume, never a whole-library value. `last_dir_id`
@@ -954,11 +979,11 @@ volumes:
      tracks — different bytes and `hash`, not duplicates of their flac
      counterparts despite sharing a piece of content conceptually.
    - Closing this volume,
-     `VOLUME_END|3|Music-003|2026-08-20_0900|3|11577606|24LRBHF2BOPABRU2MOGBRO3PX4|6`
+     `VOLUME_END|3|Music-003|2026-08-20_0900|3|11577606|9d9d004ac598249931471f7ce8f20c46|6`
      reports `3` new `F` records (`RD`/`RF`/`S` add no `F` of their own)
      and `11577606` for their combined size. `last_dir_id` becomes `6`,
      the one new `D` this volume introduced. `volume_hash`
-     (`24LRBHF2BOPABRU2MOGBRO3PX4`) is built from only these `3` hashes.
+     (`9d9d004ac598249931471f7ce8f20c46`) is built from only these `3` hashes.
 6. **Music-004** is burned after `Music-002`'s physical medium turns out to
    have failed entirely. Recovering from that means marking whatever lived
    solely on that medium as gone, then re-archiving the same content fresh
@@ -994,7 +1019,7 @@ volumes:
      content, recovered from the archivist's still-intact source files —
      filed under the *same* `dir_id=5` (`Artist Two - Album Two (2018)`)
      `Music-002` originally used.
-   - `F|6|2|...03 Track Three.flac|11707500|54IGSNGTYY4WWM4FKKQMEOLNGW|tag1,tag2`
+   - `F|6|2|...03 Track Three.flac|11707500|ef106934d3c6396b338552a0c2396d35|tag1,tag2`
      re-archives the "03 Track Three" content once more — the same
      `size`+`hash` as both `Music-001`'s `F|4|2` and the now-dead
      `Music-002` `F|6|2` — filed under the same `dir_id=2`. None of
@@ -1011,13 +1036,13 @@ volumes:
      three archived copies of it now exist across three different
      volumes.
    - Closing this volume,
-     `VOLUME_END|4|Music-004|2026-08-24_1000|6|41474037|BV6N47NFZD6XHIFB2EH2HR625I|6`
+     `VOLUME_END|4|Music-004|2026-08-24_1000|6|41474037|3205bef3b9444985cee61145b49a55df|6`
      reports `6` `F` records this volume physically wrote (the `5`
      recovered mp3 tracks plus the recovered flac) and `41474037` for
      their combined size — identical to `Music-002`'s own
      `total_vol_files`/`vol_files_size`, since `Music-004` recovers
      exactly the same six pieces of content `Music-002` originally wrote,
-     in the same order. Its `volume_hash`, `BV6N47NFZD6XHIFB2EH2HR625I`,
+     in the same order. Its `volume_hash`, `3205bef3b9444985cee61145b49a55df`,
      comes out **identical** to `Music-002`'s own `volume_hash` for the
      same reason — not a coincidence or a bug: `volume_hash` is a pure
      function of the concatenated `hash` values in order (§7
@@ -1094,6 +1119,11 @@ fits their own application.
   `! CONTENT_HASH_ALGORITHM`/`! CONTENT_HASH_ENCODING`) against its
   `volume_hash` (§7 `VOLUME_END`). A match confirms the medium is intact; a
   mismatch pinpoints that something on it has changed since it was written.
+  None of this needs a BDEA-aware application: per-file hashes come from
+  the OS's own MD5 tool, and `volume_hash` from feeding the concatenated
+  hashes to that same tool (§5 "Content hash encoding", §7 `VOLUME_END`) —
+  only remember to compare case-insensitively against tools that print
+  uppercase.
 - **Resolving the active view.** A reader maintains working state for the
   library — the directory tree, and each file/alias's current
   `dir_id`/`file_name` — and processes the log as a single left-to-right
@@ -1136,7 +1166,18 @@ fits their own application.
 ## 11. Versioning
 
 `! VERSION` on the header identifies the schema version a file conforms to,
-written as `MAJOR.MINOR` (e.g. `1.0`, `1.2`, `2.0`) — currently `1.0`.
+written as `MAJOR.MINOR` (e.g. `1.0`, `1.2`, `2.0`) — currently `2.0`.
+
+**History.** `2.0` changed `! CONTENT_HASH_ENCODING` from `base32` (1.0) to
+lowercase `hex` (§5), so that recorded hashes match what stock OS tools
+print. Every `hash`/`volume_hash` value changes form, which is why this
+is a major bump; the record and type layout is otherwise identical to
+`1.0`. Files declaring `! VERSION 1.0` remain valid under
+[`versions/1.0/BDEA-1.0_STANDARD.md`](../1.0/BDEA-1.0_STANDARD.md). Because the digest itself
+is unchanged, a `1.0` file converts to `2.0` mechanically: decode each
+`F` record's base32 `hash` and re-encode it as lowercase hex, recompute
+every `volume_hash` from the new text (§7 `VOLUME_END`), and update the
+two header lines — no archived file needs to be re-read.
 
 **Minor version — backward-compatible, additive.** Bumping only `MINOR`
 (e.g. `1.0` → `1.1`) means every file declaring an earlier minor version
