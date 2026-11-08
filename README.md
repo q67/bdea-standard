@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="spec version" src="https://img.shields.io/badge/spec%20version-1.0-blue">
+  <img alt="spec version" src="https://img.shields.io/badge/spec%20version-2.0-blue">
   <img alt="license" src="https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey">
 </p>
 
@@ -20,9 +20,12 @@ behavior. Anyone may write software that reads or writes `.bdea` files
 under this specification, for any purpose, including commercial use, without
 asking permission.
 
-- **Specification:** [`BDEA-1.0_STANDARD.md`](BDEA-1.0_STANDARD.md) (English,
+- **Specification:** [`BDEA-2.0_STANDARD.md`](BDEA-2.0_STANDARD.md) (English,
   authoritative)
-- **Worked example:** [`samples/music.bdea`](samples/music.bdea)
+- **Worked example:** [`samples/2.0/music.bdea`](samples/2.0/music.bdea)
+- **Previous version:** [`BDEA-1.0_STANDARD.md`](BDEA-1.0_STANDARD.md) and
+  [`samples/1.0/music.bdea`](samples/1.0/music.bdea), kept for reading
+  existing 1.0 files (see [`CHANGELOG.md`](CHANGELOG.md))
 - **License:** [CC BY 4.0](LICENSE)
 
 ## Why
@@ -43,32 +46,37 @@ The format is:
 - **Content-addressed** — files are matched by size + hash, not by name or
   path, so duplicates are detectable and a file survives being renamed or
   moved.
+- **Verifiable with stock tools** — hashes are MD5 in lowercase hex, the
+  same form `md5sum`, `md5`, `certutil` and `Get-FileHash` print, so a
+  volume can be checked against its index with nothing but the OS.
 
 ## At a glance
 
 ```
 ! ARCHIVE_TYPE BDEA
-! VERSION 1.0
+! VERSION 2.0
 ! LIBRARY Music
+! CONTENT_HASH_ALGORITHM md5
+! CONTENT_HASH_ENCODING hex
 ...
 
 VOLUME_START|1|Music-001|2026-08-13_1232
-
-D|1|0|Music
-D|2|1|Artist One
-F|1|3|cover.jpg|125142|P625I35ZX7YR6Y4NILBDDE3MQP
-F|2|3|...02 Track Two.flac|8541907|VUMGOS3L25V5JEP4LU6OI5PXQG|tag1,tag2
-
-VOLUME_END|1|Music-001|2026-08-13_1232|9|0|0|9|70477923|6VJWG7TG73DXOYCYXY6R6UXYUU|4
+D|1|0|Artist One
+D|2|1|Artist One - Album One
+F|1|2|cover.jpg|125142|7fb5d46fb9bff11f638d42c231936c83
+F|2|2|...01 Track One.flac|11124049|ef4e7f1fe605a39cd47f2a05f58faee5|tag1,tag2
+...
+VOLUME_END|1|Music-001|2026-08-13_1232|8|82235912|d83d681ff83f05ceb2348792b9300a01|3
 ```
 
-See [`BDEA-1.0_STANDARD.md`](BDEA-1.0_STANDARD.md) for the full grammar, and
-[`samples/music.bdea`](samples/music.bdea) for a complete worked example
-(two volumes, a duplicate-content case, and an active/deleted correction).
+See [`BDEA-2.0_STANDARD.md`](BDEA-2.0_STANDARD.md) for the full grammar, and
+[`samples/2.0/music.bdea`](samples/2.0/music.bdea) for a complete worked example
+(four volumes, duplicate content, an alias, renames, and recovery from a
+failed volume).
 
 ## Status
 
-Current format version: **1.0** (see §11 *Versioning* in the spec). This
+Current format version: **2.0** (see §11 *Versioning* in the spec). This
 repository defines the format only. Reference applications
 (browser/generator/linter) are a separate, ongoing effort.
 
@@ -99,11 +107,11 @@ source.
 
 **Is there a reference implementation?**
 Not yet. The spec is deliberately implementation-agnostic; see
-[`BDEA-Standard/BDEA-1.0_STANDARD.md` §10](BDEA-1.0_STANDARD.md#10-notes-for-implementers)
+[`BDEA-2.0_STANDARD.md` §10](BDEA-2.0_STANDARD.md#10-notes-for-implementers)
 for notes aimed at anyone building one.
 
 ## License
 
-The specification text (`BDEA-1.0_STANDARD.md` and this README) is licensed
+The specification text (`BDEA-2.0_STANDARD.md`, `BDEA-1.0_STANDARD.md` and this README) is licensed
 under [CC BY 4.0](LICENSE) — share and adapt freely,
 including commercially, with attribution.

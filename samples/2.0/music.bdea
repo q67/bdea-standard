@@ -1,0 +1,208 @@
+# THIS FILE DESCRIBES THE CONTENT OF THE LIBRARY
+# Lines starting with "!" are machine-readable declarations.
+
+! TEXT_ENCODING utf-8
+! TEXT_NORMALIZATION NFC
+
+! ARCHIVE_TYPE BDEA
+! VERSION 2.0
+! LIBRARY Music
+
+! NAME_ENCODING utf-8
+! NAME_NORMALIZATION NFC
+! NAME_FORBIDDEN_CHARACTERS / \ : * ? " < > |
+
+! CONTENT_HASH_ALGORITHM md5
+! CONTENT_HASH_ENCODING hex
+! CONTENT_HASH_SCOPE file-content
+
+#  TYPES
+
+! TYPE dir_id uint32
+! TYPE last_dir_id uint32
+! TYPE new_dir_id uint32
+! TYPE parent_dir_id uint32
+! TYPE new_parent_dir_id uint32
+! TYPE file_id uint64
+! TYPE target_file_id uint64
+! TYPE size uint64
+! TYPE dir_name string max=120
+! TYPE file_name string max=120
+! TYPE new_dir_name string max=120
+! TYPE new_file_name string max=120
+! TYPE hash string max=32
+! TYPE extra string max=256
+! TYPE volume_id uint32
+! TYPE target_volume_id uint32
+! TYPE volume_label string max=120
+! TYPE date_time string max=15 YYYY-MM-DD_hhmm
+! TYPE total_vol_files uint64
+! TYPE vol_files_size uint64
+! TYPE volume_hash string max=32
+! TYPE file_key volume_id file_id
+
+#  SCHEMA
+
+#  Volume boundary
+# VOLUME_START opens a volume's section, VOLUME_END closes it.
+# volume_id identifies the volume inside the library.
+# volume_id is an internal numeric identifier.
+# volume_label is the text printed or written on the physical archival medium.
+# date_time on VOLUME_START/VOLUME_END is when the index record itself was
+# generated, not the physical medium's write timing. Producing one volume's
+# index entries is a single fast step, so date_time is the same value
+# on VOLUME_START, VOLUME_END, and any AF/XF/XD/RD/RF records within that
+# volume's section.
+# VOLUME_END repeats volume_label/date_time for corruption detection, then adds:
+# total_vol_files/vol_files_size = this volume's own F record count and byte
+# size (the only per-volume tallies kept; AF/XF/XD/RD/RF/S have no dedicated
+# counter of their own) — not the library's active-view totals, which need
+# the whole AF/XF/XD/RD/RF history resolved to compute.
+# last_dir_id = highest dir_id assigned in the library as of this volume.
+# volume_hash = checksum of just this volume's own F records, derived from
+# their hash values already recorded above (concatenate them, no separator
+# needed since they're all the same fixed length; hash
+# with CONTENT_HASH_ALGORITHM; encode with CONTENT_HASH_ENCODING) rather than by
+# re-reading any file's content. Unlike last_dir_id, this is per-volume,
+# not a whole-library checkpoint.
+! RECORD VOLUME_START volume_id volume_label date_time
+! RECORD VOLUME_END volume_id volume_label date_time total_vol_files vol_files_size volume_hash last_dir_id
+
+# A field name ending in "?" is optional and trailing: a data line may omit it
+# (one fewer pipe-delimited field than declared); a missing one is empty/absent.
+
+#  Directory
+# A logical directory in the library's namespace.
+# Directories form a single, stable, append-only namespace tree for the whole
+# library.
+# dir_id is global across the whole library, assigned once per directory.
+# dir_id values start at 1; the library's root is implicit (0) and has no D
+# record of its own.
+# A (parent_dir_id, dir_name) pair is permanently unique across the library's
+# whole history — even a directory emptied by XD keeps occupying its pair.
+# Recovering the same logical folder reuses its existing dir_id instead of
+# minting a new one.
+# Empty directories may be omitted.
+# extra is optional/trailing, free-form (e.g. tags).
+! RECORD D dir_id parent_dir_id dir_name extra?
+
+#  File
+# The file identifier is unique only within the volume.
+# The full file identity is defined as (volume_id, file_id).
+# volume_id is derived from the enclosing VOLUME_START/VOLUME_END section.
+# File identity is defined by content size and content hash.
+# file_id is unique only within the volume_id scope.
+# dir_id is the containing directory's global id; 0 means the file lives
+# directly in the library's root.
+# extra is optional/trailing, free-form (e.g. tags).
+! RECORD F file_id dir_id file_name size hash extra?
+
+#  Symlink
+# S is an alias: a new (dir_id, file_name) tree position that reaches for an
+# existing F record's content instead of archiving another physical copy.
+# file_id is drawn from the same per-volume counter as F's file_id (shared
+# numbering), so XF/RF can correct an S the same way they correct an F.
+# target_volume_id/target_file_id may point at an F on any volume; resolved
+# through AF/XF/XD like any other content, not a rigid pointer. RF corrections
+# to the target's own file_name/dir_id don't affect the alias, which addresses
+# it by file_key, not by file_name.
+# dir_id may also be 0, same root meaning as F's dir_id.
+! RECORD S file_id dir_id file_name target_volume_id target_file_id
+
+#  Active File
+# AF marks one physical file record as the active representation of the archived
+# content. It may reference a file stored on any volume.
+# AF always names an F record, never an S — an alias holds no content of its own
+# to be canonical for.
+# Whenever the same content exists as more than one F record (any number of
+# volumes), AF names exactly one as canonical; the rest drop out of the
+# library's active file count without needing XF.
+# Like S, this is for libraries that try to avoid duplicate physical copies;
+# both AF and S are optional.
+! RECORD AF volume_id file_id date_time?
+
+#  Delete File
+# XF marks one physical file or alias record as unavailable or excluded from
+# the active view of the library. It may reference a file stored on any volume.
+! RECORD XF volume_id file_id date_time?
+
+#  Delete Directory
+# XD marks a directory, and everything beneath it in the tree (any volume),
+# as excluded from the active view. dir_id alone identifies the target,
+# since dir_id is never reused. Doesn't retire dir_id: later volumes may still
+# file new records under it — and since (parent_dir_id, dir_name) stays
+# permanently claimed, recovering the same folder reuses this same dir_id.
+# Any such new records must appear after this XD within the same section:
+# XD only wipes what's filed under dir_id as of its own position in the log.
+# Pure shorthand for writing one XF per file in the subtree; it has no other
+# purpose.
+! RECORD XD dir_id date_time?
+
+#  Rename/Relocate Directory
+# RD corrects an existing directory's parent_dir_id and/or dir_name going
+# forward, without writing any new D/F/S record. Because the tree is built
+# from dir_id/parent_dir_id links, one RD moves or renames the whole subtree at
+# once. The latest RD for a given dir_id wins.
+! RECORD RD dir_id new_parent_dir_id new_dir_name date_time?
+
+#  Rename/Relocate File
+# RF corrects an existing F or S record's dir_id and/or file_name going
+# forward, without rewriting its content. Addresses either an F or an S, like
+# AF/XF. Unrelated to AF: AF picks which duplicate is canonical, RF fixes
+# where one record sits in the tree. The latest RF for a given
+# (volume_id, file_id) wins.
+! RECORD RF volume_id file_id new_dir_id new_file_name date_time?
+
+
+VOLUME_START|1|Music-001|2026-08-13_1232
+D|1|0|Artist One
+D|2|1|Artist One - Album One
+D|3|1|.info
+F|1|2|cover.jpg|125142|7fb5d46fb9bff11f638d42c231936c83
+F|2|2|Artist One - Album One - 01 Track One.flac|11124049|ef4e7f1fe605a39cd47f2a05f58faee5|tag1,tag2
+F|3|2|Artist One - Album One - 02 Track Two label.flac|8541907|ad18674b6bd76bd491fc5d3ce475f781|tag1,tag2
+F|4|2|Artist One - Album One - 03 Track Three.flac|11707500|ef106934d3c6396b338552a0c2396d35|tag1,tag2
+F|5|2|Artist One - Album One - 04 Track Four.flac|10777319|76bca299952156ed4b7c47309730e0e7|tag1,tag2
+F|6|2|Artist One - Album One - 05 Track Five.flac|16624400|7abb648555ef8cf4d07d83237a127177|tag1,tag2
+F|7|2|Other Artist - Stray Track.flac|23334562|7abb648595ef8cf4d06383237a12719c|tag1,tag2
+F|8|3|filedata.txt|1033|fe7b12c13c3b0c949d201c07b16c561d
+VOLUME_END|1|Music-001|2026-08-13_1232|8|82235912|d83d681ff83f05ceb2348792b9300a01|3
+
+
+VOLUME_START|2|Music-002|2026-08-14_1111
+XF|1|7|2026-08-14_1111
+XD|3|2026-08-14_1111
+D|4|0|Artist Two
+D|5|4|Artist Two - Album Two (2018)
+F|1|5|01 - Track One.mp3|5789174|f5e63fc3dc3a40380f62d8ac3bd56055
+F|2|5|02 - Track Two.mp3|6118930|c372c7ba8fe3929fd82256ed9a6b162e
+F|3|5|03 - Track Three.mp3|5234963|fe7b12c13c3b0c94e0afec49a0e6a645
+F|4|5|04 - Track Four.mp3|6679444|a6a36954edc130982cc59d4bd4931b72
+F|5|5|05 - Track Five.mp3|5944026|8f5a9641bc229e2a8b7fc66ac9ec165f
+F|6|2|Artist One - Album One - 03 Track Three.flac|11707500|ef106934d3c6396b338552a0c2396d35|tag1,tag2
+AF|2|6|2026-08-14_1111
+VOLUME_END|2|Music-002|2026-08-14_1111|6|41474037|3205bef3b9444985cee61145b49a55df|5
+
+
+VOLUME_START|3|Music-003|2026-08-20_0900
+RD|2|1|Artist One - Album One (flac)|2026-08-20_0900
+RF|1|3|2|Artist One - Album One - 02 Track Two.flac|2026-08-20_0900
+D|6|1|Artist One - Album One (mp3)
+S|1|6|cover.jpg|1|1
+F|2|6|Artist One - Album One - 01 Track One.mp3|3902095|8cbdaf61d3415a8c548c3fcb91e8382a
+F|3|6|Artist One - Album One - 02 Track Two.mp3|3395847|0b11a0d33bea39e6354d9946c0dbbd81
+F|4|6|Artist One - Album One - 03 Track Three.mp3|4279664|e5c32be68a56b66bc3403a434195ffb2
+VOLUME_END|3|Music-003|2026-08-20_0900|3|11577606|9d9d004ac598249931471f7ce8f20c46|6
+
+
+VOLUME_START|4|Music-004|2026-08-24_1000
+XF|2|6|2026-08-24_1000
+XD|4|2026-08-24_1000
+F|1|5|01 - Track One.mp3|5789174|f5e63fc3dc3a40380f62d8ac3bd56055
+F|2|5|02 - Track Two.mp3|6118930|c372c7ba8fe3929fd82256ed9a6b162e
+F|3|5|03 - Track Three.mp3|5234963|fe7b12c13c3b0c94e0afec49a0e6a645
+F|4|5|04 - Track Four.mp3|6679444|a6a36954edc130982cc59d4bd4931b72
+F|5|5|05 - Track Five.mp3|5944026|8f5a9641bc229e2a8b7fc66ac9ec165f
+F|6|2|Artist One - Album One - 03 Track Three.flac|11707500|ef106934d3c6396b338552a0c2396d35|tag1,tag2
+AF|4|6|2026-08-24_1000
+VOLUME_END|4|Music-004|2026-08-24_1000|6|41474037|3205bef3b9444985cee61145b49a55df|6
