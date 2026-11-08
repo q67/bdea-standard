@@ -7,9 +7,9 @@ file format. It does not
 specify any particular application's behavior (see [§10](#10-notes-for-implementers)).
 
 This is the authoritative specification for `! VERSION 2.0`. See
-[`samples/2.0/music.bdea`](samples/2.0/music.bdea) for a canonical worked example.
+[`samples/music.bdea`](samples/music.bdea) for a canonical worked example.
 Files declaring `! VERSION 1.0` are described by
-[`BDEA-1.0_STANDARD.md`](BDEA-1.0_STANDARD.md) instead (§11).
+[`old_versions/1.0/BDEA-1.0_STANDARD.md`](old_versions/1.0/BDEA-1.0_STANDARD.md) instead (§11).
 
 ## 1. Purpose and scope
 
@@ -492,7 +492,7 @@ aliases it.
 S|1|6|cover.jpg|1|1
 ```
 
-(From `Music-003`'s section in `samples/2.0/music.bdea` — creates an alias with
+(From `Music-003`'s section in `samples/music.bdea` — creates an alias with
 its own `file_id=1`, filed under `dir_id=6`, named `cover.jpg`, that reaches
 for the `F` record `file_id=1` on `volume_id=1`; see §9 for the full
 context.)
@@ -567,7 +567,7 @@ other case of one `AF` superseding an earlier one.
 AF|2|6|2026-08-14_1111
 ```
 
-(From `Music-002`'s section in `samples/2.0/music.bdea` — names `volume_id=2,
+(From `Music-002`'s section in `samples/music.bdea` — names `volume_id=2,
 file_id=6` canonical immediately after that very record's own `F` line, in
 the same section: the archivist already knows this fresh copy should be
 preferred over `Music-001`'s original, which had turned out to read
@@ -577,7 +577,7 @@ unreliably; see §9 for the full context.)
 AF|4|6|2026-08-24_1000
 ```
 
-(From `Music-004`'s section in `samples/2.0/music.bdea` — `Music-002`'s
+(From `Music-004`'s section in `samples/music.bdea` — `Music-002`'s
 canonical copy was marked `XF` earlier in this same section, since that
 whole medium failed; this `AF`, placed right after the `F` record that
 re-archives the content fresh, names that replacement canonical instead.
@@ -613,7 +613,7 @@ is:
 XF|1|7|2026-08-14_1111
 ```
 
-(From `Music-002`'s section in `samples/2.0/music.bdea` — forcibly excludes
+(From `Music-002`'s section in `samples/music.bdea` — forcibly excludes
 `volume_id=1, file_id=7`, a track mistakenly archived onto that medium,
 from the library; see §9 for the full context.)
 
@@ -673,7 +673,7 @@ gone.
 XD|4|2026-08-24_1000
 ```
 
-(From `Music-004`'s section in `samples/2.0/music.bdea` — drops `dir_id=4` and
+(From `Music-004`'s section in `samples/music.bdea` — drops `dir_id=4` and
 the five `F` records filed under it from the active view at once, instead
 of writing one `XF` per file; see §9 for the full context.)
 
@@ -716,7 +716,7 @@ applied yet (§4, §10).
 RD|2|1|Artist One - Album One (flac)|2026-08-20_0900
 ```
 
-(From `Music-003`'s section in `samples/2.0/music.bdea` — a new sibling folder,
+(From `Music-003`'s section in `samples/music.bdea` — a new sibling folder,
 `D|6|1|Artist One - Album One (mp3)`, is about to be
 introduced under `Artist One` (`dir_id=1`) later in this same section, so
 this `RD` renames the existing flac folder, `dir_id=2`, ahead of it to add
@@ -759,7 +759,7 @@ exists.
 RF|1|3|2|Artist One - Album One - 02 Track Two.flac|2026-08-20_0900
 ```
 
-(From `Music-003`'s section in `samples/2.0/music.bdea` — fixes `Music-001`'s
+(From `Music-003`'s section in `samples/music.bdea` — fixes `Music-001`'s
 naming mistake on `F|3|2`, dropping a stray "label" from `...02 Track Two
 label.flac`; `dir_id` stays `2`, only `file_name` changes. A pure naming
 fix, no duplicate involved; see §9.)
@@ -852,7 +852,7 @@ from the highest-numbered (most recent) volume available.
 
 ## 9. Worked example
 
-Walking through [`samples/2.0/music.bdea`](samples/2.0/music.bdea), across its four
+Walking through [`samples/music.bdea`](samples/music.bdea), across its four
 volumes:
 
 1. **Music-001** is burned first. It declares `Artist One` (`dir_id=1`)
@@ -1173,7 +1173,7 @@ lowercase `hex` (§5), so that recorded hashes match what stock OS tools
 print. Every `hash`/`volume_hash` value changes form, which is why this
 is a major bump; the record and type layout is otherwise identical to
 `1.0`. Files declaring `! VERSION 1.0` remain valid under
-[`BDEA-1.0_STANDARD.md`](BDEA-1.0_STANDARD.md). Because the digest itself
+[`old_versions/1.0/BDEA-1.0_STANDARD.md`](old_versions/1.0/BDEA-1.0_STANDARD.md). Because the digest itself
 is unchanged, a `1.0` file converts to `2.0` mechanically: decode each
 `F` record's base32 `hash` and re-encode it as lowercase hex, recompute
 every `volume_hash` from the new text (§7 `VOLUME_END`), and update the

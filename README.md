@@ -22,10 +22,11 @@ asking permission.
 
 - **Specification:** [`BDEA-2.0_STANDARD.md`](BDEA-2.0_STANDARD.md) (English,
   authoritative)
-- **Worked example:** [`samples/2.0/music.bdea`](samples/2.0/music.bdea)
-- **Previous version:** [`BDEA-1.0_STANDARD.md`](BDEA-1.0_STANDARD.md) and
-  [`samples/1.0/music.bdea`](samples/1.0/music.bdea), kept for reading
-  existing 1.0 files (see [`CHANGELOG.md`](CHANGELOG.md))
+- **Worked example:** [`samples/music.bdea`](samples/music.bdea)
+- **Previous versions:** [`old_versions/`](old_versions/) — e.g.
+  [`old_versions/1.0/`](old_versions/1.0/) holds the 1.0 specification and
+  its example, kept for reading existing 1.0 files (see
+  [`CHANGELOG.md`](CHANGELOG.md))
 - **License:** [CC BY 4.0](LICENSE)
 
 ## Why
@@ -70,7 +71,7 @@ VOLUME_END|1|Music-001|2026-08-13_1232|8|82235912|d83d681ff83f05ceb2348792b9300a
 ```
 
 See [`BDEA-2.0_STANDARD.md`](BDEA-2.0_STANDARD.md) for the full grammar, and
-[`samples/2.0/music.bdea`](samples/2.0/music.bdea) for a complete worked example
+[`samples/music.bdea`](samples/music.bdea) for a complete worked example
 (four volumes, duplicate content, an alias, renames, and recovery from a
 failed volume).
 
@@ -112,6 +113,6 @@ for notes aimed at anyone building one.
 
 ## License
 
-The specification text (`BDEA-2.0_STANDARD.md`, `BDEA-1.0_STANDARD.md` and this README) is licensed
+The specification text (`BDEA-2.0_STANDARD.md`, everything under `old_versions/`, and this README) is licensed
 under [CC BY 4.0](LICENSE) — share and adapt freely,
 including commercially, with attribution.
