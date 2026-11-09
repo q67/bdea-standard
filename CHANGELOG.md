@@ -26,8 +26,9 @@ Breaking change to how content hashes are written. Specification:
 - New §4 "Field content": since the format has no escaping, `|` (the
   field separator), C0 controls U+0000–U+001F (incl. tab, LF, CR), DEL
   U+007F, C1 controls U+0080–U+009F (incl. NEL) and U+2028/U+2029 are
-  forbidden in **every** record field and declaration value — not only in
-  names. `! NAME_FORBIDDEN_CHARACTERS` adds to that set rather than
+  forbidden in **every** record field — not only in names. Declaration
+  values, split on whitespace rather than `|`, may contain `|` but none of
+  the others. `! NAME_FORBIDDEN_CHARACTERS` adds to that set rather than
   replacing it (§5); `extra` is free-form only within it (§6); §10 notes
   that source names which can't be recorded as-is must not be written
   unchanged.

@@ -82,8 +82,7 @@ Blank lines are allowed as visual separators (e.g. between volume sections).
 record is split on every `|`, and the file is split into lines on every
 line break. So that this splitting is always unambiguous, the following
 characters MUST NOT appear in any field of a record (every field, of
-every tag — names, `extra`, `volume_label`, everything), nor in any
-declaration value (§5, §6, §7):
+every tag — names, `extra`, `volume_label`, everything):
 
 | Characters | Why |
 |---|---|
@@ -94,9 +93,14 @@ declaration value (§5, §6, §7):
 | U+2028, U+2029 (line/paragraph separator) | Treated as line breaks by some tools. |
 
 This applies regardless of `! NAME_FORBIDDEN_CHARACTERS` (§5), which lists
-characters forbidden in names *in addition* to these. It doesn't apply to
-comment lines, which are free text up to the end of the line, nor to the
-whitespace separating a declaration's tokens. A field that would need one
+characters forbidden in names *in addition* to these.
+
+Declaration lines (§5, §6, §7) are split into tokens on whitespace, not
+on `|`, so `|` MAY appear in a declaration value — the canonical
+`! NAME_FORBIDDEN_CHARACTERS` value lists it, for instance. Every other
+character in the table above MUST NOT appear in a declaration value, for
+the same line-splitting reason. Comment lines are free text up to the end
+of the line and aren't restricted beyond not containing a line break. A field that would need one
 of these characters (e.g. a source file whose name contains a line break,
 possible on Linux and macOS) cannot be recorded as-is; what to do about it
 is up to the producing application (§10).
