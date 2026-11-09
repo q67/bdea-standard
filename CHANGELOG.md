@@ -23,6 +23,14 @@ Breaking change to how content hashes are written. Specification:
   hex text's ASCII bytes — reproducible with
   `printf '%s' HASH1 HASH2 ... | md5sum` (§7 `VOLUME_END`).
 - `! TYPE`/`! RECORD` layouts are otherwise unchanged from 1.0.
+- New §4 "Field content": since the format has no escaping, `|` (the
+  field separator), C0 controls U+0000–U+001F (incl. tab, LF, CR), DEL
+  U+007F, C1 controls U+0080–U+009F (incl. NEL) and U+2028/U+2029 are
+  forbidden in **every** record field and declaration value — not only in
+  names. `! NAME_FORBIDDEN_CHARACTERS` adds to that set rather than
+  replacing it (§5); `extra` is free-form only within it (§6); §10 notes
+  that source names which can't be recorded as-is must not be written
+  unchanged.
 - 1.0 remains documented in `versions/1.0/BDEA-1.0_STANDARD.md` with
   its example in `versions/1.0/samples/music.bdea`. A 1.0 file
   converts to 2.0 mechanically — re-encode each `hash` from base32 to hex,
