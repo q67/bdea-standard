@@ -23,15 +23,21 @@ Breaking change to how content hashes are written. Specification:
   hex text's ASCII bytes — reproducible with
   `printf '%s' HASH1 HASH2 ... | md5sum` (§7 `VOLUME_END`).
 - `! TYPE`/`! RECORD` layouts are otherwise unchanged from 1.0.
-- New §4 "Characters": a line break is LF or CR LF; the ordinary space
-  (U+0020) is the only separator, the only indentation and the only
-  whitespace allowed anywhere in the file — no tabs, no-break spaces or
-  other Unicode whitespace, even inside names; every other character is a
-  visible one, never a control character; no record field — not only
-  names — may contain `|`, which declarations may still use. These hold
-  whatever `! NAME_FORBIDDEN_CHARACTERS` declares (§5); §10 notes that
+- New §4 "Characters": a line break is LF or CR LF, and U+2028/U+2029
+  never appear; the ordinary space (U+0020) is the only separator and the
+  only indentation; no control characters (category `Cc`, the tab among
+  them) apart from line breaks; no record field — not only names — may
+  contain `|`, which declarations may still use. Everything else is
+  allowed — explicitly including other space characters (`Zs`, e.g. the
+  no-break space U+00A0 or U+202F), which count as ordinary characters
+  and never as separators, and format characters (`Cf`) such as the
+  zero-width joiner, variation selectors and the other parts of emoji
+  sequences like 👷‍♀️; validators must not reject either. These hold
+  whatever `! NAME_FORBIDDEN_CHARACTERS` declares (§5), which a library
+  may use to forbid no-break spaces in its own names; §10 notes that
   source names which can't be recorded as-is must not be written
-  unchanged.
+  unchanged, and that look-alike spaces should be made noticeable when
+  names are shown.
 - 1.0 remains documented in `versions/1.0/BDEA-1.0_STANDARD.md` with
   its example in `versions/1.0/samples/music.bdea`. A 1.0 file
   converts to 2.0 mechanically — re-encode each `hash` from base32 to hex,

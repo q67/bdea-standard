@@ -78,28 +78,46 @@ A `.bdea` file is UTF-8 text with three kinds of lines:
 
 Blank lines are allowed as visual separators (e.g. between volume sections).
 
-**Characters.** A `.bdea` file is plain, visible text. Three rules cover
-everything about which characters it may contain:
+**Characters.** A `.bdea` file is plain text. Four rules cover everything
+about which characters it may contain:
 
 - **Line break** means LF (`\n`) or CR LF (`\r\n`) — nothing else ends a
-  line. A reader MUST accept both.
+  line. A reader MUST accept both. U+2028 LINE SEPARATOR and U+2029
+  PARAGRAPH SEPARATOR never appear anywhere in the file.
 - **Space** means the ordinary space character (U+0020) and nothing else.
-  It is the only character used to separate or indent text, and the only
-  whitespace character a `.bdea` file may contain at all: tabs, no-break
-  spaces, thin/en/em spaces, ideographic spaces, and any other character
-  Unicode classifies as whitespace never appear anywhere in the file —
-  not in names, not in any other field, not in comments, not between a
-  declaration's tokens. Apart from spaces and line breaks, every
-  character in the file is a visible one: no control characters either.
+  It is the only character that separates or indents text — between a
+  declaration's tokens, or anywhere else a separator is meant. Other space
+  characters (Unicode general category `Zs`: the no-break space U+00A0,
+  the narrow no-break space U+202F, en/em/thin spaces, the ideographic
+  space U+3000, …) are allowed, but only as ordinary characters inside
+  text — a name, any other field, a comment, a declaration's token — and
+  never as a separator: a reader treats them exactly like any letter.
+  They turn up in real names (macOS puts U+202F before "AM"/"PM" in
+  screenshot names; French typography puts U+00A0 before ":"), every
+  common filesystem accepts them, and a name holding one can be restored
+  exactly as it was.
+- **No control characters.** Characters of Unicode general category `Cc`
+  (U+0000–U+001F and U+007F–U+009F) — the tab among them — never appear
+  anywhere in the file, apart from the LF and CR that make up line
+  breaks.
 - **No `|` inside a record field.** Records are split on `|` with no
   escaping, so no record field may contain it. Declarations are split on
   spaces, not `|`, so `|` is fine there — the canonical
   `! NAME_FORBIDDEN_CHARACTERS` value lists it.
 
+Every other character is allowed, including ones that are invisible on
+their own but belong to the text around them: format characters (Unicode
+general category `Cf`) such as the zero-width joiner U+200D and the
+zero-width non-joiner U+200C, variation selectors such as U+FE0F, emoji
+skin-tone modifiers, and combining marks. They are how emoji sequences
+are spelled — 👷‍♀️ is 👷 U+200D ♀ U+FE0F, 😮‍💨 is 😮 U+200D 💨, 🤸🏼‍♂️ is
+🤸 🏼 U+200D ♂ U+FE0F — and some scripts need them in ordinary words. A
+reader or validator MUST NOT reject a field for containing them.
+
 These rules hold whatever a file's `! NAME_FORBIDDEN_CHARACTERS` (§5)
 declares; that list only forbids further characters in names. A field
 that would break them (e.g. a source file whose name contains `|`, a
-no-break space or a line break, all possible on Linux and macOS) cannot
+tab or a line break, all possible on Linux and macOS) cannot
 be recorded as-is; what to do about it is up to the producing
 application (§10).
 
@@ -155,7 +173,7 @@ These appear once, near the top of the file, before any volume section.
 | `! LIBRARY` | `Music` | Name of this library. |
 | `! NAME_ENCODING` | `utf-8` | Encoding used for `dir_name`/`file_name` fields. |
 | `! NAME_NORMALIZATION` | `NFC` | Unicode normalization applied to names. |
-| `! NAME_FORBIDDEN_CHARACTERS` | `/ \ : * ? " < > \|` | Characters names must not contain (superset of Windows/exFAT-reserved characters — a safe choice for media meant to be readable from any filesystem). Adds to, never replaces, §4 "Characters": `\|`, line breaks and any whitespace other than the space stay forbidden in names even if a file's declared list omits them. |
+| `! NAME_FORBIDDEN_CHARACTERS` | `/ \ : * ? " < > \|` | Characters names must not contain (superset of Windows/exFAT-reserved characters — a safe choice for media meant to be readable from any filesystem). Adds to, never replaces, §4 "Characters": `\|`, control characters (the tab among them) and U+2028/U+2029 stay forbidden in names even if a file's declared list omits them. A library that wants to keep no-break and other non-ordinary spaces (§4) out of its names can list them here too. |
 | `! CONTENT_HASH_ALGORITHM` | `md5` | Hash algorithm used to identify file content. |
 | `! CONTENT_HASH_ENCODING` | `hex` | Encoding used to render the hash as text: lowercase hexadecimal (see below). |
 | `! CONTENT_HASH_SCOPE` | `file-content` | What is hashed (the raw file bytes, as opposed to e.g. name+content). |
@@ -1151,8 +1169,8 @@ fits their own application.
   only remember to compare case-insensitively against tools that print
   uppercase.
 - **Source names a field can't hold.** Linux and macOS allow almost any
-  character in a file or directory name — including `|`, tabs, no-break
-  spaces and line breaks, as well as the Windows-reserved characters in
+  character in a file or directory name — including `|`, tabs and line
+  breaks, as well as the Windows-reserved characters in
   `! NAME_FORBIDDEN_CHARACTERS`. A producing application scanning such a
   source will meet names the index can't record (§4 "Characters", §5).
   Whether it refuses the file, asks the archivist for a new name, or
@@ -1162,6 +1180,13 @@ fits their own application.
   worth surfacing to the archivist rather than doing silently. The same
   check belongs wherever an application accepts free text into a field —
   `volume_label`, `extra`, or new names given by `RD`/`RF`.
+- **Spaces that look alike.** A name may hold a no-break or other
+  non-ordinary space (§4 "Characters"), which looks just like U+0020 but
+  is a different character: `A B` written with U+0020 and a name that
+  looks the same but is written with U+00A0 are two different names. An application that shows names should make such
+  spaces noticeable (e.g. by marking them or showing their code point),
+  and one that searches names may treat them as matching an ordinary
+  space. Neither changes what is recorded.
 - **Resolving the active view.** A reader maintains working state for the
   library — the directory tree, and each file/alias's current
   `dir_id`/`file_name` — and processes the log as a single left-to-right
@@ -1217,7 +1242,7 @@ is unchanged, a `1.0` file converts to `2.0` mechanically: decode each
 `F` record's base32 `hash` and re-encode it as lowercase hex, recompute
 every `volume_hash` from the new text (§7 `VOLUME_END`), and update the
 two header lines — no archived file needs to be re-read. The one
-exception is a tab, no-break space or other non-space whitespace in a
+exception is a control character (e.g. a tab) or U+2028/U+2029 in a
 field (e.g. in a name): 1.0 didn't forbid it, so it must be replaced
 during conversion (§4 "Characters").
 
