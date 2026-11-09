@@ -23,9 +23,11 @@ Breaking change to how content hashes are written. Specification:
   hex text's ASCII bytes — reproducible with
   `printf '%s' HASH1 HASH2 ... | md5sum` (§7 `VOLUME_END`).
 - `! TYPE`/`! RECORD` layouts are otherwise unchanged from 1.0.
-- New §4 "Characters": a line break is LF or CR LF; "space" means the
-  space character only; apart from line breaks the file holds only
-  printable characters and spaces (no tabs); no record field — not only
+- New §4 "Characters": a line break is LF or CR LF; the ordinary space
+  (U+0020) is the only separator, the only indentation and the only
+  whitespace allowed anywhere in the file — no tabs, no-break spaces or
+  other Unicode whitespace, even inside names; every other character is a
+  visible one, never a control character; no record field — not only
   names — may contain `|`, which declarations may still use. These hold
   whatever `! NAME_FORBIDDEN_CHARACTERS` declares (§5); §10 notes that
   source names which can't be recorded as-is must not be written

@@ -83,11 +83,14 @@ everything about which characters it may contain:
 
 - **Line break** means LF (`\n`) or CR LF (`\r\n`) — nothing else ends a
   line. A reader MUST accept both.
-- **Space** means the space character itself — never a tab or any other
-  whitespace. Apart from line breaks, a `.bdea` file contains only
-  printable characters and spaces: no tabs or other control characters,
-  anywhere — not in names, not in any other field, not between a
-  declaration's tokens.
+- **Space** means the ordinary space character (U+0020) and nothing else.
+  It is the only character used to separate or indent text, and the only
+  whitespace character a `.bdea` file may contain at all: tabs, no-break
+  spaces, thin/en/em spaces, ideographic spaces, and any other character
+  Unicode classifies as whitespace never appear anywhere in the file —
+  not in names, not in any other field, not in comments, not between a
+  declaration's tokens. Apart from spaces and line breaks, every
+  character in the file is a visible one: no control characters either.
 - **No `|` inside a record field.** Records are split on `|` with no
   escaping, so no record field may contain it. Declarations are split on
   spaces, not `|`, so `|` is fine there — the canonical
@@ -95,9 +98,10 @@ everything about which characters it may contain:
 
 These rules hold whatever a file's `! NAME_FORBIDDEN_CHARACTERS` (§5)
 declares; that list only forbids further characters in names. A field
-that would break them (e.g. a source file whose name contains `|` or a
-line break, both possible on Linux and macOS) cannot be recorded as-is;
-what to do about it is up to the producing application (§10).
+that would break them (e.g. a source file whose name contains `|`, a
+no-break space or a line break, all possible on Linux and macOS) cannot
+be recorded as-is; what to do about it is up to the producing
+application (§10).
 
 **The format is self-describing.** The field order for each record tag is not
 hard-coded by this spec — it's declared in the file itself via `! RECORD`
@@ -151,7 +155,7 @@ These appear once, near the top of the file, before any volume section.
 | `! LIBRARY` | `Music` | Name of this library. |
 | `! NAME_ENCODING` | `utf-8` | Encoding used for `dir_name`/`file_name` fields. |
 | `! NAME_NORMALIZATION` | `NFC` | Unicode normalization applied to names. |
-| `! NAME_FORBIDDEN_CHARACTERS` | `/ \ : * ? " < > \|` | Characters names must not contain (superset of Windows/exFAT-reserved characters — a safe choice for media meant to be readable from any filesystem). Adds to, never replaces, §4 "Characters": `\|`, tabs and line breaks stay forbidden in names even if a file's declared list omits them. |
+| `! NAME_FORBIDDEN_CHARACTERS` | `/ \ : * ? " < > \|` | Characters names must not contain (superset of Windows/exFAT-reserved characters — a safe choice for media meant to be readable from any filesystem). Adds to, never replaces, §4 "Characters": `\|`, line breaks and any whitespace other than the space stay forbidden in names even if a file's declared list omits them. |
 | `! CONTENT_HASH_ALGORITHM` | `md5` | Hash algorithm used to identify file content. |
 | `! CONTENT_HASH_ENCODING` | `hex` | Encoding used to render the hash as text: lowercase hexadecimal (see below). |
 | `! CONTENT_HASH_SCOPE` | `file-content` | What is hashed (the raw file bytes, as opposed to e.g. name+content). |
@@ -1147,8 +1151,8 @@ fits their own application.
   only remember to compare case-insensitively against tools that print
   uppercase.
 - **Source names a field can't hold.** Linux and macOS allow almost any
-  character in a file or directory name — including `|`, tabs and line
-  breaks, as well as the Windows-reserved characters in
+  character in a file or directory name — including `|`, tabs, no-break
+  spaces and line breaks, as well as the Windows-reserved characters in
   `! NAME_FORBIDDEN_CHARACTERS`. A producing application scanning such a
   source will meet names the index can't record (§4 "Characters", §5).
   Whether it refuses the file, asks the archivist for a new name, or
@@ -1213,8 +1217,9 @@ is unchanged, a `1.0` file converts to `2.0` mechanically: decode each
 `F` record's base32 `hash` and re-encode it as lowercase hex, recompute
 every `volume_hash` from the new text (§7 `VOLUME_END`), and update the
 two header lines — no archived file needs to be re-read. The one
-exception is a tab in a field (e.g. in a name): 1.0 didn't forbid it, so
-it must be removed during conversion (§4 "Characters").
+exception is a tab, no-break space or other non-space whitespace in a
+field (e.g. in a name): 1.0 didn't forbid it, so it must be replaced
+during conversion (§4 "Characters").
 
 **Minor version — backward-compatible, additive.** Bumping only `MINOR`
 (e.g. `1.0` → `1.1`) means every file declaring an earlier minor version
