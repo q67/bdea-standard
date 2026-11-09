@@ -68,7 +68,7 @@ library from the name.
 
 A `.bdea` file is UTF-8 text with three kinds of lines:
 
-- **Declarations** — start with `!`, whitespace-separated tokens:
+- **Declarations** — start with `!`, tokens separated by spaces:
   `! KEYWORD value...`. These are machine-readable.
 - **Comments** — start with `#`, free text, ignored by parsers.
 - **Records** — data lines shaped `TAG|field1|field2|...`, pipe-delimited.
@@ -78,32 +78,26 @@ A `.bdea` file is UTF-8 text with three kinds of lines:
 
 Blank lines are allowed as visual separators (e.g. between volume sections).
 
-**Field content.** The format has no escaping or quoting mechanism: a
-record is split on every `|`, and the file is split into lines on every
-line break. So that this splitting is always unambiguous, the following
-characters MUST NOT appear in any field of a record (every field, of
-every tag — names, `extra`, `volume_label`, everything):
+**Characters.** A `.bdea` file is plain, visible text. Three rules cover
+everything about which characters it may contain:
 
-| Characters | Why |
-|---|---|
-| `\|` (U+007C) | The record field separator. |
-| U+0000–U+001F (C0 controls, incl. tab, LF, CR) | LF/CR end the line; the rest are invisible and unsafe in plain text. |
-| U+007F (DEL) | Control character. |
-| U+0080–U+009F (C1 controls, incl. NEL U+0085) | Control characters; NEL is treated as a line break by some tools. |
-| U+2028, U+2029 (line/paragraph separator) | Treated as line breaks by some tools. |
+- **Line break** means LF (`\n`) or CR LF (`\r\n`) — nothing else ends a
+  line. A reader MUST accept both.
+- **Space** means the space character itself — never a tab or any other
+  whitespace. Apart from line breaks, a `.bdea` file contains only
+  printable characters and spaces: no tabs or other control characters,
+  anywhere — not in names, not in any other field, not between a
+  declaration's tokens.
+- **No `|` inside a record field.** Records are split on `|` with no
+  escaping, so no record field may contain it. Declarations are split on
+  spaces, not `|`, so `|` is fine there — the canonical
+  `! NAME_FORBIDDEN_CHARACTERS` value lists it.
 
-This applies regardless of `! NAME_FORBIDDEN_CHARACTERS` (§5), which lists
-characters forbidden in names *in addition* to these.
-
-Declaration lines (§5, §6, §7) are split into tokens on whitespace, not
-on `|`, so `|` MAY appear in a declaration value — the canonical
-`! NAME_FORBIDDEN_CHARACTERS` value lists it, for instance. Every other
-character in the table above MUST NOT appear in a declaration value, for
-the same line-splitting reason. Comment lines are free text up to the end
-of the line and aren't restricted beyond not containing a line break. A field that would need one
-of these characters (e.g. a source file whose name contains a line break,
-possible on Linux and macOS) cannot be recorded as-is; what to do about it
-is up to the producing application (§10).
+These rules hold whatever a file's `! NAME_FORBIDDEN_CHARACTERS` (§5)
+declares; that list only forbids further characters in names. A field
+that would break them (e.g. a source file whose name contains `|` or a
+line break, both possible on Linux and macOS) cannot be recorded as-is;
+what to do about it is up to the producing application (§10).
 
 **The format is self-describing.** The field order for each record tag is not
 hard-coded by this spec — it's declared in the file itself via `! RECORD`
@@ -157,7 +151,7 @@ These appear once, near the top of the file, before any volume section.
 | `! LIBRARY` | `Music` | Name of this library. |
 | `! NAME_ENCODING` | `utf-8` | Encoding used for `dir_name`/`file_name` fields. |
 | `! NAME_NORMALIZATION` | `NFC` | Unicode normalization applied to names. |
-| `! NAME_FORBIDDEN_CHARACTERS` | `/ \ : * ? " < > \|` | Characters names must not contain (superset of Windows/exFAT-reserved characters — a safe choice for media meant to be readable from any filesystem). Adds to, never replaces, the characters forbidden in every field (§4 "Field content"): `\|` and control characters are forbidden in names even if a file's declared list omits them. |
+| `! NAME_FORBIDDEN_CHARACTERS` | `/ \ : * ? " < > \|` | Characters names must not contain (superset of Windows/exFAT-reserved characters — a safe choice for media meant to be readable from any filesystem). Adds to, never replaces, §4 "Characters": `\|`, tabs and line breaks stay forbidden in names even if a file's declared list omits them. |
 | `! CONTENT_HASH_ALGORITHM` | `md5` | Hash algorithm used to identify file content. |
 | `! CONTENT_HASH_ENCODING` | `hex` | Encoding used to render the hash as text: lowercase hexadecimal (see below). |
 | `! CONTENT_HASH_SCOPE` | `file-content` | What is hashed (the raw file bytes, as opposed to e.g. name+content). |
@@ -193,8 +187,7 @@ the same digest written in another case.
 
 Declares the primitive type of every field used by records, so the file is
 self-describing and independently parseable. Every `string` value is
-additionally subject to the characters forbidden in every field (§4
-"Field content").
+also subject to §4 "Characters".
 
 | Type name | Kind | Notes |
 |---|---|---|
@@ -211,7 +204,7 @@ additionally subject to the characters forbidden in every field (§4
 | `new_dir_name` | `string max=120` | Same kind as `dir_name`; the corrected name an `RD` correction gives a directory (§7 `RD`). |
 | `new_file_name` | `string max=120` | Same kind as `file_name`; the corrected name an `RF` correction gives a file or alias (§7 `RF`). |
 | `hash` | `string max=32` | Encoded content hash: exactly 32 lowercase hex characters for MD5 (§5 "Content hash encoding"). |
-| `extra` | `string max=256` | Free-form field on `D`/`F` records (§7 `D`, §7 `F`), e.g. tags. Free-form within §4 "Field content": it may not contain `\|` or control characters, so an application storing structured data here must pick its own inner separator (e.g. `,` as in `tag1,tag2`). Left empty by any application that has no use for it. |
+| `extra` | `string max=256` | Free-form field on `D`/`F` records (§7 `D`, §7 `F`), e.g. tags. Free-form within §4 "Characters": it may not contain `\|`, so an application storing structured data here must pick its own inner separator (e.g. `,` as in `tag1,tag2`). Left empty by any application that has no use for it. |
 | `volume_id` | `uint32` | Unique within the library, assigned monotonically increasing, and never reused. |
 | `target_volume_id` | `uint32` | Same kind as `volume_id`; the volume of the `F` record an `S` alias reaches for (§7 `S`). |
 | `volume_label` | `string max=120` | Human/physical label printed on the medium. |
@@ -1154,10 +1147,10 @@ fits their own application.
   only remember to compare case-insensitively against tools that print
   uppercase.
 - **Source names a field can't hold.** Linux and macOS allow almost any
-  character in a file or directory name — including `|`, line breaks and
-  other control characters, as well as the Windows-reserved characters in
+  character in a file or directory name — including `|`, tabs and line
+  breaks, as well as the Windows-reserved characters in
   `! NAME_FORBIDDEN_CHARACTERS`. A producing application scanning such a
-  source will meet names the index can't record (§4 "Field content", §5).
+  source will meet names the index can't record (§4 "Characters", §5).
   Whether it refuses the file, asks the archivist for a new name, or
   substitutes the offending characters automatically is its own choice;
   what it must not do is write the name as-is. Whatever the policy, a
@@ -1213,17 +1206,15 @@ written as `MAJOR.MINOR` (e.g. `1.0`, `1.2`, `2.0`) — currently `2.0`.
 lowercase `hex` (§5), so that recorded hashes match what stock OS tools
 print. Every `hash`/`volume_hash` value changes form, which is why this
 is a major bump; the record and type layout is otherwise identical to
-`1.0`. `2.0` also makes explicit which characters no field may contain
-(§4 "Field content"). Files declaring `! VERSION 1.0` remain valid under
+`1.0`. `2.0` also makes explicit which characters a file may contain
+(§4 "Characters"). Files declaring `! VERSION 1.0` remain valid under
 [`versions/1.0/BDEA-1.0_STANDARD.md`](../1.0/BDEA-1.0_STANDARD.md). Because the digest itself
 is unchanged, a `1.0` file converts to `2.0` mechanically: decode each
 `F` record's base32 `hash` and re-encode it as lowercase hex, recompute
 every `volume_hash` from the new text (§7 `VOLUME_END`), and update the
 two header lines — no archived file needs to be re-read. The one
-exception is a field containing a character §4 forbids: a `|` or line
-break never parsed correctly under 1.0 either, but another control
-character (e.g. a tab in a name) did, and must be removed during
-conversion.
+exception is a tab in a field (e.g. in a name): 1.0 didn't forbid it, so
+it must be removed during conversion (§4 "Characters").
 
 **Minor version — backward-compatible, additive.** Bumping only `MINOR`
 (e.g. `1.0` → `1.1`) means every file declaring an earlier minor version
