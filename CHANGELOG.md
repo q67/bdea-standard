@@ -26,8 +26,10 @@ Breaking change to how content hashes are written. Specification:
 - New §4 "Characters": a line break is LF or CR LF, and U+2028/U+2029
   never appear; the ordinary space (U+0020) is the only separator and the
   only indentation; no control characters (category `Cc`, the tab among
-  them) apart from line breaks; no record field — not only names — may
-  contain `|`, which declarations may still use. Everything else is
+  them) apart from line breaks; no BOM is written, but a reader skips a
+  single leading U+FEFF (some editors add one when saving) and a
+  validator doesn't reject a file for it; no record field — not only
+  names — may contain `|`, which declarations may still use. Everything else is
   allowed — explicitly including other space characters (`Zs`, e.g. the
   no-break space U+00A0 or U+202F), which count as ordinary characters
   and never as separators, and format characters (`Cf`) such as the

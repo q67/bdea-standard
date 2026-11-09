@@ -78,7 +78,7 @@ A `.bdea` file is UTF-8 text with three kinds of lines:
 
 Blank lines are allowed as visual separators (e.g. between volume sections).
 
-**Characters.** A `.bdea` file is plain text. Four rules cover everything
+**Characters.** A `.bdea` file is plain text. Five rules cover everything
 about which characters it may contain:
 
 - **Line break** means LF (`\n`) or CR LF (`\r\n`) — nothing else ends a
@@ -100,6 +100,12 @@ about which characters it may contain:
   (U+0000–U+001F and U+007F–U+009F) — the tab among them — never appear
   anywhere in the file, apart from the LF and CR that make up line
   breaks.
+- **No byte order mark.** An application writing a `.bdea` file doesn't
+  start it with a BOM (U+FEFF). Some editors add one when saving, so a
+  reader MUST skip a single U+FEFF at the very start of the file and
+  read the rest as usual; a validator may warn about it but MUST NOT
+  reject the file for it. Anywhere else, U+FEFF is just another format
+  character (below).
 - **No `|` inside a record field.** Records are split on `|` with no
   escaping, so no record field may contain it. Declarations are split on
   spaces, not `|`, so `|` is fine there — the canonical
